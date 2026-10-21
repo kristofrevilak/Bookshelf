@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Octavo",
+    name: "Bookshelf",
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "MTPKit", targets: ["MTPKit"]),
@@ -10,10 +10,10 @@ let package = Package(
         .library(name: "SyncEngine", targets: ["SyncEngine"]),
         .library(name: "MetadataFetch", targets: ["MetadataFetch"]),
         .library(name: "KindleFormat", targets: ["KindleFormat"]),
-        .executable(name: "Octavo", targets: ["Octavo"]),
+        .executable(name: "Bookshelf", targets: ["Bookshelf"]),
         .executable(name: "mtpprobe", targets: ["mtpprobe"]),
-        .executable(name: "octavo-sync", targets: ["octavo-sync"]),
-        .executable(name: "octavo-convert", targets: ["octavo-convert"]),
+        .executable(name: "bookshelf-sync", targets: ["bookshelf-sync"]),
+        .executable(name: "bookshelf-convert", targets: ["bookshelf-convert"]),
     ],
     targets: [
         .target(name: "MTPKit"),
@@ -21,15 +21,15 @@ let package = Package(
         .target(name: "SyncEngine", dependencies: ["MTPKit", "CalibreLibrary", "KindleFormat"]),
         .target(name: "MetadataFetch"),
         .target(name: "KindleFormat"),
-        .executableTarget(name: "Octavo", dependencies: ["SyncEngine", "CalibreLibrary", "MetadataFetch", "KindleFormat"]),
+        .executableTarget(name: "Bookshelf", dependencies: ["SyncEngine", "CalibreLibrary", "MetadataFetch", "KindleFormat"]),
         .executableTarget(name: "mtpprobe", dependencies: ["MTPKit"]),
-        .executableTarget(name: "octavo-sync", dependencies: ["SyncEngine"]),
-        .executableTarget(name: "octavo-convert", dependencies: ["KindleFormat"]),
+        .executableTarget(name: "bookshelf-sync", dependencies: ["SyncEngine"]),
+        .executableTarget(name: "bookshelf-convert", dependencies: ["KindleFormat"]),
         .testTarget(name: "MTPKitTests", dependencies: ["MTPKit"]),
         .testTarget(name: "CalibreLibraryTests", dependencies: ["CalibreLibrary"]),
         .testTarget(name: "SyncEngineTests", dependencies: ["SyncEngine"]),
         .testTarget(name: "MetadataFetchTests", dependencies: ["MetadataFetch"]),
         .testTarget(name: "KindleFormatTests", dependencies: ["KindleFormat"]),
-        .testTarget(name: "OctavoTests", dependencies: ["Octavo"]),
+        .testTarget(name: "BookshelfTests", dependencies: ["Bookshelf"]),
     ]
 )

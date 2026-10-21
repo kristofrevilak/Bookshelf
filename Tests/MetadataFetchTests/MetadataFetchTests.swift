@@ -9,7 +9,7 @@ import Testing
     #expect(MetadataFetcher.date(fromGoogleDate: "весна") == nil)
 }
 
-/// Hits the real catalogues; skipped unless OCTAVO_NETWORK_TESTS=1 so the suite stays offline.
+/// Hits the real catalogues; skipped unless BOOKSHELF_NETWORK_TESTS=1 so the suite stays offline.
 @Test(.requiresNetwork, .tags(.network)) func searchesLatinTitle() async {
     let results = await MetadataFetcher(googleAPIKey: nil).search(title: "Dune", author: "Frank Herbert")
     #expect(results.candidates.contains { $0.source == "Open Library" })
@@ -34,8 +34,8 @@ extension Trait where Self == ConditionTrait {
     /// so renaming a test cannot silently put it back on the network.
     static var requiresNetwork: Self {
         .enabled(
-            if: ProcessInfo.processInfo.environment["OCTAVO_NETWORK_TESTS"] == "1",
-            "set OCTAVO_NETWORK_TESTS=1 to run the tests that hit the live catalogues"
+            if: ProcessInfo.processInfo.environment["BOOKSHELF_NETWORK_TESTS"] == "1",
+            "set BOOKSHELF_NETWORK_TESTS=1 to run the tests that hit the live catalogues"
         )
     }
 }

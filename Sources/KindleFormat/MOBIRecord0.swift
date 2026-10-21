@@ -152,7 +152,7 @@ enum MOBIRecord0 {
             formatter.formatOptions = [.withInternetDateTime]
             add(106, formatter.string(from: published))
         }
-        add(108, "Octavo")
+        add(108, "Bookshelf")
         // ASIN, twice, the way calibre writes it: 113 is what the firmware reads, 504 is the
         // copy KF8 readers fall back to.
         add(113, metadata.asin)

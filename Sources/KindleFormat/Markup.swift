@@ -2,7 +2,7 @@ import Foundation
 
 /// The markup handling shared by the readers and both writers.
 ///
-/// There is no HTML tree parser here and there should not be one: nothing in Octavo needs a
+/// There is no HTML tree parser here and there should not be one: nothing in Bookshelf needs a
 /// DOM. Reading uses regexes for single-attribute lookups, and the KF8 writer uses `tags(in:)`,
 /// a forward scanner that finds tag and attribute *byte ranges* and copies everything else
 /// through untouched. Byte ranges are the point — every offset a KF8 index records is a byte

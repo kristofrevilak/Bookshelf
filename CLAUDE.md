@@ -4,16 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Octavo — a native macOS replacement for calibre (1 GB) whose job is syncing an ebook library to a
+Bookshelf is a fork of Octavo (github.com/artemnovichkov/Octavo, MIT) that adds USB-drive Kindles,
+the cover-thumbnail fix and Convert to AZW3. Two things keep Octavo's name on purpose: the on-device
+manifest `documents/.octavo.json`, so either app can sync the same Kindle, and the legacy
+`org.octavo.Octavo` defaults suite, read once as a fallback for the remembered library.
+
+Bookshelf — a native macOS replacement for calibre (1 GB) whose job is syncing an ebook library to a
 Kindle Paperwhite 12 and editing metadata. SwiftPM package, no external dependencies: MTP is written
 directly on IOUSBHost, SQLite and zlib come from the SDK. The built `.app` is ~3.8 MB: 1.7 MB of it is
-the original binary, then `Octavo.icns`, then the AZW3/KF8 writer.
+the original binary, then `Bookshelf.icns`, then the AZW3/KF8 writer.
 
 Two icons exist side by side, drawn by sibling scripts from the same sheet/dog-ear geometry:
-`Resources/Octavo.icns` (`make-icon.swift`), which `make-app.sh`'s release build embeds, and
-`Resources/Octavo.icon` (`make-liquid-icon.swift`), a Liquid Glass `.icon` bundle — icon.json plus
+`Resources/Bookshelf.icns` (`make-icon.swift`), which `make-app.sh`'s release build embeds, and
+`Resources/Bookshelf.icon` (`make-liquid-icon.swift`), a Liquid Glass `.icon` bundle — icon.json plus
 a transparent-background glyph PNG in `Assets/`, editable in Icon Composer.app (ships inside
-Xcode 26) — which only the Tuist-generated `Octavo.xcworkspace` target consumes, via
+Xcode 26) — which only the Tuist-generated `Bookshelf.xcworkspace` target consumes, via
 `ASSETCATALOG_COMPILER_APPICON_NAME` in `Project.swift`. The plate is not rasterized for the
 `.icon`: its gradient is `fill`/`fill-specializations` in icon.json, and the system renders the
 rounded-square mask, glass material and specular sheen around the one foreground glyph layer.
@@ -23,8 +28,8 @@ It operates **in place on the user's real calibre library** at `~/Calibre Librar
 
 **calibre the application is not required.** `CalibreLibraryStore.create(at:)` lays down calibre's
 own schema (`CalibreSchema.sql`, copied verbatim from `metadata_sqlite.sql`, `user_version=26`), so
-a library Octavo made opens in calibre later with no migration. Which library is open is resolved by
-`LibraryLocation`: the path remembered under `LibraryRoot` in the `org.octavo.Octavo` defaults suite
+a library Bookshelf made opens in calibre later with no migration. Which library is open is resolved by
+`LibraryLocation`: the path remembered under `LibraryRoot` in the `com.kristofrevilak.Bookshelf` defaults suite
 (a suite, not `.standard`, so the CLIs see what the app sees), else `~/Calibre Library` if it exists,
 else nothing — and *nothing* is the welcome screen (`AppModel.LibraryState.needsSetup`), which is
 deliberately distinct from `.failed`: one offers to create a library, the other reports a broken one.
@@ -34,15 +39,15 @@ deliberately distinct from `.failed`: one offers to create a library, the other 
 ```sh
 swift build                              # libraries + CLIs
 swift test                               # whole suite, offline: the catalogue tests are skipped
-OCTAVO_NETWORK_TESTS=1 swift test        # …including the three tests that hit the live catalogues
+BOOKSHELF_NETWORK_TESTS=1 swift test        # …including the three tests that hit the live catalogues
 swift test --filter convertsEPUB         # one test (regex on the test function name, not a shell glob)
-./Scripts/make-app.sh                    # build/Octavo.app (release build + bundle + ad-hoc sign)
-OCTAVO_VERSION=1.2 OCTAVO_BUILD=7 ./Scripts/make-app.sh   # what the release workflow does
-open build/Octavo.app
-swift Scripts/make-icon.swift            # redraws Resources/Octavo.icns; only after changing artwork
-swift Scripts/make-liquid-icon.swift     # redraws Resources/Octavo.icon (Liquid Glass); only after changing artwork
-open Package.swift                       # opens the package in Xcode; the Octavo scheme runs, but without a bundle
-tuist generate                           # builds Octavo.xcworkspace from Project.swift: Octavo runs as a real .app (bundle id, Info.plist, Resources/Octavo.icon) + one scheme per test target; gitignored, rerun after Project.swift/Package.swift changes
+./Scripts/make-app.sh                    # build/Bookshelf.app (release build + bundle + ad-hoc sign)
+BOOKSHELF_VERSION=1.2 BOOKSHELF_BUILD=7 ./Scripts/make-app.sh   # what the release workflow does
+open build/Bookshelf.app
+swift Scripts/make-icon.swift            # redraws Resources/Bookshelf.icns; only after changing artwork
+swift Scripts/make-liquid-icon.swift     # redraws Resources/Bookshelf.icon (Liquid Glass); only after changing artwork
+open Package.swift                       # opens the package in Xcode; the Bookshelf scheme runs, but without a bundle
+tuist generate                           # builds Bookshelf.xcworkspace from Project.swift: Bookshelf runs as a real .app (bundle id, Info.plist, Resources/Bookshelf.icon) + one scheme per test target; gitignored, rerun after Project.swift/Package.swift changes
 ```
 
 CLIs, all of which talk to a connected Kindle:
@@ -51,26 +56,26 @@ CLIs, all of which talk to a connected Kindle:
 .build/debug/mtpprobe                    # USB descriptors, MTP session, device contents — read-only
 .build/debug/mtpprobe --ls system        # list a folder;  --cat path  dumps a file to stdout
 .build/debug/mtpprobe --push f  --rm n   # write/delete a single file in documents/
-.build/debug/octavo-sync                 # dry run: what a sync would do, writes nothing
-.build/debug/octavo-sync --apply         # real sync (pulls a documents/ backup first unless --no-backup)
-.build/debug/octavo-sync --library PATH  # a library other than the resolved one
-.build/debug/octavo-sync --format mobi   # override Settings ▸ Conversion for one run
-.build/debug/octavo-convert book.epub    # conversion alone (--format azw3|mobi; default is the app's setting)
+.build/debug/bookshelf-sync                 # dry run: what a sync would do, writes nothing
+.build/debug/bookshelf-sync --apply         # real sync (pulls a documents/ backup first unless --no-backup)
+.build/debug/bookshelf-sync --library PATH  # a library other than the resolved one
+.build/debug/bookshelf-sync --format mobi   # override Settings ▸ Conversion for one run
+.build/debug/bookshelf-convert book.epub    # conversion alone (--format azw3|mobi; default is the app's setting)
 ```
 
-**The MTP interface is claimed exclusively.** While Octavo.app runs, every CLI fails with "The MTP
-interface is busy in another process", and vice versa. `pkill -x Octavo` before using the CLIs.
+**The MTP interface is claimed exclusively.** While Bookshelf.app runs, every CLI fails with "The MTP
+interface is busy in another process", and vice versa. `pkill -x Bookshelf` before using the CLIs.
 
 ### Releasing
 
 `.github/workflows/release.yml` fires on a `v*` tag: it stamps the tag into the bundle through
-`OCTAVO_VERSION`, archives with `ditto -c -k --keepParent` (plain `zip` drops the xattrs an ad-hoc
+`BOOKSHELF_VERSION`, archives with `ditto -c -k --keepParent` (plain `zip` drops the xattrs an ad-hoc
 signature relies on), re-verifies the unpacked copy, and publishes the zip plus a CLI tarball and
 `SHA256SUMS.txt`. It is **not idempotent** — a failed run after the tag was pushed needs
 `gh release delete <tag> --yes` and the tag deleted on both sides before re-tagging. Both workflows
 pin `runs-on: macos-26`; an unpinned `macos-latest` would let the toolchain move between a green CI
 run and a release build. The shipped app is signed with a Developer ID (hardened runtime,
-secure timestamp), notarized and stapled: `make-app.sh` signs with `OCTAVO_SIGN_IDENTITY` when set
+secure timestamp), notarized and stapled: `make-app.sh` signs with `BOOKSHELF_SIGN_IDENTITY` when set
 and ad-hoc otherwise, so local builds need no certificate. The workflow needs five secrets —
 `DEVELOPER_ID_P12_BASE64`, `DEVELOPER_ID_P12_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`
 — and fails rather than shipping unsigned when one is missing. It trusts notarytool's JSON
@@ -86,10 +91,10 @@ KindleFormat  zip reader, metadata parsers (EPUB/MOBI/FB2/PDF/CBZ), AZW3/KF8 + M
 MetadataFetch Open Library + FantLab + Google Books
 SyncEngine    library↔device diff, on-device manifest, conversion cache, transfer, cover thumbnails;
               KindleStorage: MTPKindleStorage (MTP) and VolumeKindleStorage (mounted USB drive)
-Octavo        SwiftUI app (AppModel + DeviceController actor)
+Bookshelf        SwiftUI app (AppModel + DeviceController actor)
 ```
 
-Dependency direction is one-way: `Octavo → SyncEngine → {MTPKit, CalibreLibrary, KindleFormat}`.
+Dependency direction is one-way: `Bookshelf → SyncEngine → {MTPKit, CalibreLibrary, KindleFormat}`.
 `CalibreLibrary` deliberately knows nothing about ebook formats — the caller reads metadata with
 `KindleFormat` and hands over a `NewBook`.
 
@@ -112,9 +117,9 @@ book's cached conversion.
 wraps the session exactly as the engine used it before. `VolumeKindleStorage` is a Kindle mounted
 as a disk — the Kindle 10th generation (firmware 5.18.1) and everything before the MTP models —
 and is plain file I/O on `/Volumes/Kindle`. `DeviceController.connect()` prefers a mounted Kindle
-(`KindleVolume.mounted()`) and falls back to MTP; `octavo-sync` does the same.
+(`KindleVolume.mounted()`) and falls back to MTP; `bookshelf-sync` does the same.
 
-Drive-mode details that matter: writes go to a hidden `.…octavo-part` temp file, fsync, then a
+Drive-mode details that matter: writes go to a hidden `.…bookshelf-part` temp file, fsync, then a
 rename, so a pulled cable never leaves a truncated book under its real name; AppleDouble `._name`
 files and `.DS_Store` are hidden from listings (they would otherwise show as orphans) and a book's
 `._` companion is deleted with it; a volume only counts as a Kindle with `documents/` *and*
@@ -131,7 +136,7 @@ A sideloaded book with an ASIN and cdetype EBOK is filed as a store book: the fi
 thumbnail it made from the embedded cover and fetches one from Amazon by ASIN, which fails, so the
 cover goes grey. calibre's fix, reproduced in `Thumbnails.swift`: write
 `system/thumbnails/thumbnail_<ASIN>_<cdetype>_portrait.jpg` (330 px high), keep a copy in
-`~/Library/Caches/Octavo/thumbnails`, record the name in the manifest entry, and put it back on
+`~/Library/Caches/Bookshelf/thumbnails`, record the name in the manifest entry, and put it back on
 every connect. The writers now stamp the book uuid as ASIN (EXTH 113 and 504), as calibre does;
 `ConversionCache.revision` was bumped to 2 for it, so old cached conversions are not reused.
 On connect only already-recorded thumbnails are restored (no write to `documents/`); during a sync
@@ -177,7 +182,7 @@ transfer from showing both a transfer error and "Kindle not connected" — detac
 
 ### Sync state
 
-Lives on the device in `documents/.octavo.json`, keyed by calibre book uuid. On first run Octavo
+Lives on the device in `documents/.octavo.json`, keyed by calibre book uuid. On first run Bookshelf
 adopts calibre's own `metadata.calibre` from the storage root so books already there are not
 re-uploaded.
 
@@ -222,7 +227,7 @@ These cost debugging time; do not rediscover them.
   `KF8Markup` writes a fixed-width placeholder first. Filling it in must not move a single byte or
   every offset already recorded goes wrong.
 - **Text records are exactly 4096 uncompressed bytes, never fewer.** The reader locates flow
-  offset N by dividing by that size, so a short record drifts every index after it. Octavo did
+  offset N by dividing by that size, so a short record drifts every index after it. Bookshelf did
   ship records shortened to UTF-8 character boundaries once: a Cyrillic book rendered from the
   middle of a tag (`div>` visible on screen) and could not be paged, while an ASCII book looked
   fine. `RecordSizeInvariantTests` runs the same assertions over calibre's files and ours.
@@ -239,7 +244,7 @@ These cost debugging time; do not rediscover them.
   relying on it as the fallback.
 - **The conversion cache is keyed on the source file only** — uuid, size, mtime. Changing the
   converter itself invalidates nothing, so a re-sync silently reuses output built by the old code.
-  `rm -rf ~/Library/Caches/Octavo/converted` after touching a writer, or you will test the last
+  `rm -rf ~/Library/Caches/Bookshelf/converted` after touching a writer, or you will test the last
   build. The same goes for the manifest: an unchanged library file is never re-sent, so forcing a
   re-send means deleting the file off the device first.
 - **The NCX index stores entries breadth-first by depth, names them in hex, and gives a parent a
@@ -263,7 +268,7 @@ Enforced in code, not by convention — keep them that way:
   "Remove from device" goes through `DeviceController.remove(bookUUIDs:)`, which resolves filenames
   from the manifest and deletes via `delete(filename:)` — and that only ever matches non-folder
   entries, which is what keeps the `.sdr` sidecars safe.
-- `octavo-sync --apply` pulls all of `documents/` to `~/Library/Application Support/Octavo/device-backup`
+- `bookshelf-sync --apply` pulls all of `documents/` to `~/Library/Application Support/Bookshelf/device-backup`
   before its first write; `CalibreLibraryStore.backup` copies `metadata.db` before the first edit.
 
 ## Testing
@@ -280,7 +285,7 @@ never parses the file it imports, so a few bytes named `sample.epub` are a valid
 `user_version`, the `library_id` row, and a `sort`/`uuid` filled in by the insert trigger.
 
 Three tests in `MetadataFetchTests` hit the network, and all three are gated on the
-`.requiresNetwork` condition trait (`OCTAVO_NETWORK_TESTS=1`) rather than on a `--skip` regex in CI —
+`.requiresNetwork` condition trait (`BOOKSHELF_NETWORK_TESTS=1`) rather than on a `--skip` regex in CI —
 SwiftPM cannot filter by tag, and a name-based skip list silently lapses when a test is renamed.
 Any new test that reaches a catalogue needs that trait. Assertions must be specific enough to catch real
 breakage: earlier corpus tests only checked "cover is non-nil" and "title differs from the filename",

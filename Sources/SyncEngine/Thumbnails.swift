@@ -21,7 +21,7 @@ public struct ThumbnailCache: Sendable {
     public let directory: URL
 
     public static let `default` = ThumbnailCache(
-        directory: URL.cachesDirectory.appending(path: "Octavo/thumbnails")
+        directory: URL.cachesDirectory.appending(path: "Bookshelf/thumbnails")
     )
 
     public init(directory: URL) {
@@ -121,7 +121,7 @@ extension SyncEngine {
     /// still on the device.
     ///
     /// `recordNew` also covers books whose thumbnail was never recorded — sent by calibre, or
-    /// by Octavo before it wrote thumbnails — by reading the ASIN out of the file on the device.
+    /// by Bookshelf before it wrote thumbnails — by reading the ASIN out of the file on the device.
     /// That records the name in the manifest, so it is a write to `documents/` and only happens
     /// as part of a sync; a plain connect passes `false` and touches nothing but thumbnails.
     @discardableResult

@@ -2,7 +2,7 @@ import Foundation
 
 /// What EPUB, FB2 and CBZ are converted into before they are sent to the Kindle.
 ///
-/// It lives in `KindleFormat` rather than `SyncEngine` because `octavo-convert` depends only on
+/// It lives in `KindleFormat` rather than `SyncEngine` because `bookshelf-convert` depends only on
 /// this module — putting it a layer up would drag MTPKit and CalibreLibrary into a CLI that
 /// never touches USB.
 ///
@@ -29,11 +29,11 @@ public enum ConversionTarget: String, Sendable, Codable, CaseIterable, Hashable 
 }
 
 public extension ConversionTarget {
-    static let defaultsSuite = "org.octavo.Octavo"
+    static let defaultsSuite = "com.kristofrevilak.Bookshelf"
     static let defaultsKey = "conversion.target"
 
     /// What the app is set to, so a CLI run and a sync from the app agree without either
-    /// having to be told. Same suite trick as `LibraryLocation`: inside Octavo.app the suite
+    /// having to be told. Same suite trick as `LibraryLocation`: inside Bookshelf.app the suite
     /// *is* our own domain, and asking for it by name returns nil.
     static var preferred: ConversionTarget {
         let defaults = Bundle.main.bundleIdentifier == defaultsSuite

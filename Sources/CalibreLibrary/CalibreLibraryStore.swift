@@ -1,8 +1,8 @@
 import Foundation
 
 /// Reads and writes a calibre library in place — same metadata.db, same folder layout,
-/// so calibre keeps working alongside Octavo. calibre itself need not be installed: `create`
-/// lays down the same schema, so a library Octavo made is one calibre can open later.
+/// so calibre keeps working alongside Bookshelf. calibre itself need not be installed: `create`
+/// lays down the same schema, so a library Bookshelf made is one calibre can open later.
 public final class CalibreLibraryStore {
     public let root: URL
     public let isReadOnly: Bool

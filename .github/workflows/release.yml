@@ -9,11 +9,14 @@ permissions:
 
 jobs:
   release:
-    name: Build and publish Octavo.app
+    name: Build and publish Bookshelf.app
     runs-on: macos-26
     timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
+      # Without a Developer ID (the fork has none), the app is ad-hoc signed and not
+      # notarized: it runs, but the first launch needs right-click ▸ Open.
+      HAS_SIGNING: ${{ secrets.DEVELOPER_ID_P12_BASE64 != '' && secrets.ASC_KEY_P8 != '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -47,6 +50,7 @@ jobs:
       # The identity name is read back from it, so it is not a secret of its own.
       - name: Import the Developer ID certificate
         id: cert
+        if: env.HAS_SIGNING == 'true'
         env:
           P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
@@ -70,17 +74,18 @@ jobs:
           : "${identity:?no Developer ID Application identity in the certificate}"
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
 
-      - name: Assemble Octavo.app
+      - name: Assemble Bookshelf.app
         env:
-          OCTAVO_VERSION: ${{ steps.v.outputs.version }}
-          OCTAVO_BUILD: ${{ github.run_number }}
-          OCTAVO_SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+          BOOKSHELF_VERSION: ${{ steps.v.outputs.version }}
+          BOOKSHELF_BUILD: ${{ github.run_number }}
+          BOOKSHELF_SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
         run: ./Scripts/make-app.sh release
 
       # notarytool's exit code is not trusted on its own: the JSON status must say Accepted,
       # and anything else prints Apple's log, which names the offending file. The ticket is
       # then stapled into the bundle, so Gatekeeper passes it offline too.
       - name: Notarize and staple
+        if: env.HAS_SIGNING == 'true'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -91,7 +96,7 @@ jobs:
           printf '%s\n' "$ASC_KEY_P8" > "$key"
           auth=(--key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
 
-          ditto -c -k --keepParent build/Octavo.app "$RUNNER_TEMP/notarize.zip"
+          ditto -c -k --keepParent build/Bookshelf.app "$RUNNER_TEMP/notarize.zip"
           result="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${auth[@]}" \
             --wait --timeout 20m --output-format json)"
           echo "$result"
@@ -103,7 +108,7 @@ jobs:
           fi
           rm "$key"
 
-          xcrun stapler staple build/Octavo.app
+          xcrun stapler staple build/Bookshelf.app
 
       # ditto, not zip: it is Apple's archiver for signed bundles and keeps the extended
       # attributes a signature relies on. Zipped after stapling, so the ticket ships inside.
@@ -114,35 +119,37 @@ jobs:
           ARCH: ${{ steps.v.outputs.arch }}
         run: |
           mkdir -p dist
-          app_zip="dist/Octavo-${VERSION}-macos-${ARCH}.zip"
-          ditto -c -k --keepParent build/Octavo.app "$app_zip"
+          app_zip="dist/Bookshelf-${VERSION}-macos-${ARCH}.zip"
+          ditto -c -k --keepParent build/Bookshelf.app "$app_zip"
 
           bin="$(swift build -c release --show-bin-path)"
-          tar -C "$bin" -czf "dist/octavo-cli-${VERSION}-macos-${ARCH}.tar.gz" \
-            mtpprobe octavo-sync octavo-convert
+          tar -C "$bin" -czf "dist/bookshelf-cli-${VERSION}-macos-${ARCH}.tar.gz" \
+            mtpprobe bookshelf-sync bookshelf-convert
 
           ( cd dist && shasum -a 256 -- * > SHA256SUMS.txt )
           ls -l dist
           echo "app_zip=$app_zip" >> "$GITHUB_OUTPUT"
 
-      # Catches "Octavo is damaged and can't be opened" — or a Gatekeeper rejection — here
+      # Catches "Bookshelf is damaged and can't be opened" — or a Gatekeeper rejection — here
       # rather than on a user's Mac.
       - name: Verify the signature survives the round trip
         run: |
           rm -rf "$RUNNER_TEMP/verify"
           mkdir -p "$RUNNER_TEMP/verify"
           ditto -x -k "${{ steps.pkg.outputs.app_zip }}" "$RUNNER_TEMP/verify"
-          app="$RUNNER_TEMP/verify/Octavo.app"
+          app="$RUNNER_TEMP/verify/Bookshelf.app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          xcrun stapler validate "$app"
-          spctl --assess --type execute --verbose=2 "$app"
+          if [[ "$HAS_SIGNING" == "true" ]]; then
+            xcrun stapler validate "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          fi
           plutil -lint "$app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist"
 
       - name: Create the GitHub release
         run: |
           gh release create "${{ steps.v.outputs.tag }}" \
-            --title "Octavo ${{ steps.v.outputs.version }}" \
+            --title "Bookshelf ${{ steps.v.outputs.version }}" \
             --generate-notes \
             --verify-tag \
             --prerelease=${{ steps.v.outputs.prerelease }} \

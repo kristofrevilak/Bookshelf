@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct OctavoApp: App {
+struct BookshelfApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {

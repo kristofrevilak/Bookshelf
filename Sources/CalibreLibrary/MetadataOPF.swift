@@ -2,7 +2,7 @@ import Foundation
 
 extension CalibreLibraryStore {
     /// calibre keeps a metadata.opf next to every book and rebuilds its database from
-    /// those files when asked to. Octavo writes one on every change so the library stays
+    /// those files when asked to. Bookshelf writes one on every change so the library stays
     /// self-describing even if metadata.db is lost.
     public func writeOPF(for book: Book) throws {
         let directory = root.appending(path: book.path)

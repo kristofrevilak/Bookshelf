@@ -6,7 +6,7 @@ import Testing
 private func makeLibraryCopy() throws -> URL? {
     let source = CalibreLibraryStore.defaultLocation.appending(path: "metadata.db")
     guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else { return nil }
-    let directory = URL.temporaryDirectory.appending(path: "octavo-test-\(UUID().uuidString)")
+    let directory = URL.temporaryDirectory.appending(path: "bookshelf-test-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     try FileManager.default.copyItem(at: source, to: directory.appending(path: "metadata.db"))
     return directory
@@ -14,12 +14,12 @@ private func makeLibraryCopy() throws -> URL? {
 
 /// An empty library built from the embedded schema — no calibre, no real library needed.
 private func makeEmptyLibrary() -> URL {
-    URL.temporaryDirectory.appending(path: "octavo-test-\(UUID().uuidString)")
+    URL.temporaryDirectory.appending(path: "bookshelf-test-\(UUID().uuidString)")
 }
 
 /// The importer never parses the file, it only copies it and records its size, so any bytes do.
 private func makeSampleFile(_ name: String) throws -> URL {
-    let url = URL.temporaryDirectory.appending(path: "octavo-sample-\(UUID().uuidString)")
+    let url = URL.temporaryDirectory.appending(path: "bookshelf-sample-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     let file = url.appending(path: name)
     try Data("not-a-real-book".utf8).write(to: file)
@@ -40,10 +40,10 @@ private func makeSampleFile(_ name: String) throws -> URL {
 }
 
 /// `LibraryLocation.recents` backs the app's File ▸ Open Recent menu. Runs against the real
-/// `org.octavo.Octavo` defaults suite — the same one the app and CLIs share — so it saves and
+/// `com.kristofrevilak.Bookshelf` defaults suite — the same one the app and CLIs share — so it saves and
 /// restores whatever was there rather than leaving test data behind.
 @Test func recentLibrariesCapAtEightAndDropMissingOnes() throws {
-    let defaults = UserDefaults(suiteName: "org.octavo.Octavo")!
+    let defaults = UserDefaults(suiteName: "com.kristofrevilak.Bookshelf")!
     let savedRecents = defaults.stringArray(forKey: "RecentLibraries")
     let savedRoot = defaults.string(forKey: "LibraryRoot")
     defer {
@@ -55,7 +55,7 @@ private func makeSampleFile(_ name: String) throws -> URL {
 
     var libraries: [URL] = []
     for _ in 0..<9 {
-        let url = URL.temporaryDirectory.appending(path: "octavo-recents-\(UUID().uuidString)")
+        let url = URL.temporaryDirectory.appending(path: "bookshelf-recents-\(UUID().uuidString)")
         try CalibreLibraryStore.create(at: url)
         libraries.append(url)
     }
@@ -129,24 +129,24 @@ private func makeSampleFile(_ name: String) throws -> URL {
     let store = try CalibreLibraryStore.create(at: library)
     var book = try store.add(fileAt: sample, metadata: NewBook(title: "Seed", authors: ["Someone"]))
 
-    book.title = "The Octavo Test Title"
+    book.title = "The Bookshelf Test Title"
     book.authors = ["Ada Lovelace"]
-    book.tags = ["octavo-test", "sync"]
-    book.series = "The Octavo Series"
+    book.tags = ["bookshelf-test", "sync"]
+    book.series = "The Bookshelf Series"
     book.seriesIndex = 3
-    book.comments = "written by Octavo"
+    book.comments = "written by Bookshelf"
     book.identifiers = ["isbn": "9780000000001"]
     try store.update(book)
 
     let reloaded = try #require(try store.books().first { $0.id == book.id })
-    #expect(reloaded.title == "The Octavo Test Title")
-    #expect(reloaded.sort == "Octavo Test Title, The")  // computed by calibre's trigger
+    #expect(reloaded.title == "The Bookshelf Test Title")
+    #expect(reloaded.sort == "Bookshelf Test Title, The")  // computed by calibre's trigger
     #expect(reloaded.authors == ["Ada Lovelace"])
     #expect(reloaded.authorSort == "Lovelace, Ada")
-    #expect(reloaded.tags.sorted() == ["octavo-test", "sync"])
-    #expect(reloaded.series == "The Octavo Series")
+    #expect(reloaded.tags.sorted() == ["bookshelf-test", "sync"])
+    #expect(reloaded.series == "The Bookshelf Series")
     #expect(reloaded.seriesIndex == 3)
-    #expect(reloaded.comments == "written by Octavo")
+    #expect(reloaded.comments == "written by Bookshelf")
     #expect(reloaded.identifiers["isbn"] == "9780000000001")
 }
 

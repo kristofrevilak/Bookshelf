@@ -33,15 +33,15 @@ jobs:
       - name: Build
         run: swift build
 
-      # The catalogue tests are gated on OCTAVO_NETWORK_TESTS, which is unset here, so this
+      # The catalogue tests are gated on BOOKSHELF_NETWORK_TESTS, which is unset here, so this
       # run touches no network. Corpus and library tests bail out quietly without a library.
       - name: Test
         run: swift test
 
-      - name: Assemble Octavo.app
+      - name: Assemble Bookshelf.app
         run: ./Scripts/make-app.sh debug
 
       - name: Verify the bundle
         run: |
-          codesign --verify --deep --strict --verbose=2 build/Octavo.app
-          plutil -lint build/Octavo.app/Contents/Info.plist
+          codesign --verify --deep --strict --verbose=2 build/Bookshelf.app
+          plutil -lint build/Bookshelf.app/Contents/Info.plist

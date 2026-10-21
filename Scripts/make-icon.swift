@@ -1,12 +1,12 @@
 #!/usr/bin/env swift
-// Draws Octavo.icns. Run it by hand after changing the artwork:
+// Draws Bookshelf.icns. Run it by hand after changing the artwork:
 //
 //     swift Scripts/make-icon.swift
 //
-// The generated Resources/Octavo.icns is committed, so make-app.sh stays a pure copy and
+// The generated Resources/Bookshelf.icns is committed, so make-app.sh stays a pure copy and
 // building the app never depends on this script.
 //
-// The mark is the name made literal: an octavo is a sheet folded three times into eight
+// The mark is the name made literal: an bookshelf is a sheet folded three times into eight
 // leaves, so the page carries one vertical and three horizontal fold lines, plus a turned
 // corner. Fold lines are dropped at small sizes, where they would only turn to mud.
 
@@ -17,8 +17,8 @@ import ImageIO
 import UniformTypeIdentifiers
 
 let root = URL(filePath: FileManager.default.currentDirectoryPath)
-let iconset = root.appending(path: "Resources/Octavo.iconset")
-let icns = root.appending(path: "Resources/Octavo.icns")
+let iconset = root.appending(path: "Resources/Bookshelf.iconset")
+let icns = root.appending(path: "Resources/Bookshelf.icns")
 
 // MARK: - Palette
 
@@ -103,7 +103,7 @@ func drawIcon(in context: CGContext, size: CGFloat) {
     context.setFillColor(paperShade)
     context.fillPath()
 
-    // Fold lines: 1 vertical + 3 horizontal = the eight leaves of an octavo. At 32pt and
+    // Fold lines: 1 vertical + 3 horizontal = the eight leaves of an bookshelf. At 32pt and
     // below they stop resolving, so the page reads as a plain sheet instead of a smudge.
     // Below 64px the leaves stop resolving and the sheet is better left plain.
     guard size >= 64 else { return }

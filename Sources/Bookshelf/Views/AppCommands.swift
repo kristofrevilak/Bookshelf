@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Everything in the menu bar beyond what SwiftUI supplies for free (About, Quit, Window…).
 /// Kept as a standalone `Commands` conformance, the same way `DeviceToolbar` is a standalone
-/// `ToolbarContent` — `OctavoApp` just assembles the scene.
+/// `ToolbarContent` — `BookshelfApp` just assembles the scene.
 struct AppCommands: Commands {
     let model: AppModel
 
@@ -126,7 +126,7 @@ struct AppCommands: Commands {
         }
 
         CommandGroup(replacing: .help) {
-            Link("Octavo on GitHub", destination: URL(string: "https://github.com/artemnovichkov/Octavo")!)
+            Link("Bookshelf on GitHub", destination: URL(string: "https://github.com/kristofrevilak/Bookshelf")!)
         }
     }
 }

@@ -1,26 +1,30 @@
 <div align="center">
 
-<img src="docs/icon.png" width="128" alt="Octavo icon">
+<img src="docs/icon.png" width="128" alt="Bookshelf icon">
 
-# Octavo
+# Bookshelf
 
 **A native macOS app that syncs your ebook library to a Kindle and edits its metadata.**
 A 4 MB replacement for the 1 GB calibre, working on the very same library.
 
-[![CI](https://github.com/artemnovichkov/Octavo/actions/workflows/ci.yml/badge.svg)](https://github.com/artemnovichkov/Octavo/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/artemnovichkov/Octavo?include_prereleases)](https://github.com/artemnovichkov/Octavo/releases/latest)
+A fork of [Octavo](https://github.com/artemnovichkov/Octavo) by Artem Novichkov that adds
+Kindles which connect as a USB drive (Kindle 10th generation and older), calibre's cover-thumbnail
+fix, and an on-demand Convert to AZW3.
+
+[![CI](https://github.com/kristofrevilak/Bookshelf/actions/workflows/ci.yml/badge.svg)](https://github.com/kristofrevilak/Bookshelf/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kristofrevilak/Bookshelf?include_prereleases)](https://github.com/kristofrevilak/Bookshelf/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-26%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
 </div>
 
-![Octavo library window](docs/screenshots/library.png)
+![Bookshelf library window](docs/screenshots/library.png)
 
-Octavo works **in place on your existing calibre library** at `~/Calibre Library` — the same
+Bookshelf works **in place on your existing calibre library** at `~/Calibre Library` — the same
 `metadata.db`, the same folder layout. Nothing to migrate, and calibre keeps working alongside it.
 
-calibre itself is not required. If there is no library, Octavo offers to create one, and the result
+calibre itself is not required. If there is no library, Bookshelf offers to create one, and the result
 is a calibre library proper — same schema, `user_version=26` — so calibre opens it later without a
 migration.
 
@@ -72,15 +76,15 @@ Metadata editor with live catalogue search:
 
 ## Install
 
-Download the latest `Octavo-<version>-macos-arm64.zip` from
-[Releases](https://github.com/artemnovichkov/Octavo/releases/latest), unzip it and move `Octavo.app`
+Download the latest `Bookshelf-<version>-macos-arm64.zip` from
+[Releases](https://github.com/kristofrevilak/Bookshelf/releases/latest), unzip it and move `Bookshelf.app`
 into `/Applications`. The app is signed with a Developer ID and notarized by Apple, so it opens
 like any other.
 
 The CLI tarball is not notarized. Clear the quarantine flag on the binaries before running them:
 
 ```sh
-xattr -d com.apple.quarantine mtpprobe octavo-sync octavo-convert
+xattr -d com.apple.quarantine mtpprobe bookshelf-sync bookshelf-convert
 ```
 
 Requires macOS 26 or later on Apple Silicon.
@@ -96,19 +100,19 @@ No external dependencies at all — SwiftPM resolves nothing, everything comes f
 | `KindleFormat` | Own zip reader on **zlib**, metadata parsers for EPUB/MOBI/FB2/PDF/CBZ, and AZW3/KF8 + MOBI 6 writers whose header offsets, index layouts and PalmDoc coding were recovered by scanning reference files. |
 | `MetadataFetch` | `URLSession` against Open Library, FantLab and Google Books. |
 | `SyncEngine` | Library↔device diff, on-device manifest, conversion cache, transfer. |
-| `Octavo` | **SwiftUI** app: `@MainActor @Observable` model over a `DeviceController` actor. |
+| `Bookshelf` | **SwiftUI** app: `@MainActor @Observable` model over a `DeviceController` actor. |
 
 Swift 6 language mode with strict concurrency, Swift Testing, SwiftPM, macOS 26+, Apple Silicon.
-Dependencies run one way: `Octavo → SyncEngine → {MTPKit, CalibreLibrary, KindleFormat}`.
+Dependencies run one way: `Bookshelf → SyncEngine → {MTPKit, CalibreLibrary, KindleFormat}`.
 
 ## Build from source
 
 ```sh
 swift build                                   # libraries and CLIs
 swift test                                    # the suite; the catalogue tests are skipped
-OCTAVO_NETWORK_TESTS=1 swift test             # include the tests that hit the live catalogues
-./Scripts/make-app.sh                         # build/Octavo.app, ad-hoc signed
-open build/Octavo.app
+BOOKSHELF_NETWORK_TESTS=1 swift test             # include the tests that hit the live catalogues
+./Scripts/make-app.sh                         # build/Bookshelf.app, ad-hoc signed
+open build/Bookshelf.app
 ```
 
 ## CLI
@@ -119,22 +123,22 @@ open build/Octavo.app
 .build/debug/mtpprobe --cat system/version.txt
 .build/debug/mtpprobe --push file        # write a single file into documents/
 .build/debug/mtpprobe --rm name          # delete a single file from documents/
-.build/debug/octavo-sync                 # dry run: what a sync would do, writes nothing
-.build/debug/octavo-sync --apply         # real sync (pulls a documents/ backup first)
-.build/debug/octavo-sync --library PATH  # a library other than the resolved one
-.build/debug/octavo-sync --format mobi   # override the app's Conversion setting for one run
-.build/debug/octavo-convert book.epub    # conversion alone
-.build/debug/octavo-convert book.epub --format mobi
+.build/debug/bookshelf-sync                 # dry run: what a sync would do, writes nothing
+.build/debug/bookshelf-sync --apply         # real sync (pulls a documents/ backup first)
+.build/debug/bookshelf-sync --library PATH  # a library other than the resolved one
+.build/debug/bookshelf-sync --format mobi   # override the app's Conversion setting for one run
+.build/debug/bookshelf-convert book.epub    # conversion alone
+.build/debug/bookshelf-convert book.epub --format mobi
 ```
 
-The MTP interface is claimed exclusively: while Octavo.app is running every CLI fails with *"The MTP
-interface is busy in another process"*, and vice versa. `pkill -x Octavo` first.
+The MTP interface is claimed exclusively: while Bookshelf.app is running every CLI fails with *"The MTP
+interface is busy in another process"*, and vice versa. `pkill -x Bookshelf` first.
 
 ## How syncing works
 
 State lives on the device in `documents/.octavo.json`, keyed by the calibre book uuid. Renaming a
 book in the library therefore does not produce a duplicate, and reinstalling the app loses nothing.
-On first run Octavo adopts calibre's own `metadata.calibre` from the storage root, so books already
+On first run Bookshelf adopts calibre's own `metadata.calibre` from the storage root, so books already
 on the device are not re-uploaded.
 
 A book counts as stale when the device file differs from what the manifest recorded, when the
@@ -148,8 +152,8 @@ transfer, so its copies are a few bytes larger than the original.
   Kindle treats as a firmware update.
 - `.sdr` folders — reading progress, annotations, highlights — are never deleted. Orphan detection
   skips folders entirely, and removing a book is only ever an explicit user action.
-- `octavo-sync --apply` pulls all of `documents/` into
-  `~/Library/Application Support/Octavo/device-backup` before its first write, and `metadata.db` is
+- `bookshelf-sync --apply` pulls all of `documents/` into
+  `~/Library/Application Support/Bookshelf/device-backup` before its first write, and `metadata.db` is
   copied before the first edit.
 
 ## Conversion
@@ -168,7 +172,7 @@ switchable in Settings ▸ Conversion (and with `--format` on either CLI):
 Neither target is guesswork: the header offsets, the four INDX/TAGX/CNCX index layouts, the
 skeleton/chunk arrangement and the PalmDoc coding were all recovered by decoding the AZW3 files
 calibre produced for this same library. The test suite parses all 30 of them before it is allowed
-to parse anything Octavo wrote.
+to parse anything Bookshelf wrote.
 
 Three header fields cost real debugging time, and all three are documented in the writers: the DRM
 offset/count at `0x98`/`0x9C`, where being four bytes off makes the Kindle report *"Unable to open
@@ -178,10 +182,10 @@ agree exactly with the trailers each text record actually carries. Text records 
 uncompressed bytes; shortening them to land on character boundaries silently breaks every index
 in the file, and only shows up on a book that is not pure ASCII.
 
-Results are cached in `~/Library/Caches/Octavo/converted`, keyed by source size and mtime, so
+Results are cached in `~/Library/Caches/Bookshelf/converted`, keyed by source size and mtime, so
 editing a book invalidates its own cache entry. The target format is the file extension, so the two
 do not collide and switching back and forth does not throw the cache away. Note that the key folds
-in the *source* only: changing Octavo's own converter does not invalidate anything, so clear the
+in the *source* only: changing Bookshelf's own converter does not invalidate anything, so clear the
 cache after one.
 
 ## Metadata sources
@@ -190,10 +194,10 @@ Open Library covers Latin script, FantLab covers Russian fiction, and Google Boo
 else — though its anonymous quota is shared and usually exhausted. Your own key:
 
 ```sh
-defaults write org.octavo.Octavo GoogleBooksAPIKey YOUR_KEY
+defaults write com.kristofrevilak.Bookshelf GoogleBooksAPIKey YOUR_KEY
 ```
 
-Which library is open is remembered under `LibraryRoot` in the same `org.octavo.Octavo` defaults
+Which library is open is remembered under `LibraryRoot` in the same `com.kristofrevilak.Bookshelf` defaults
 suite, so the CLIs and the app always agree on it.
 
 ## Not implemented yet

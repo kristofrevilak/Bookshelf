@@ -60,7 +60,7 @@ public protocol KindleStorage: AnyObject {
     /// and highlights — are never matched.
     func deleteDocument(named name: String) throws
 
-    /// True when the device has a `system/thumbnails/` folder Octavo can write covers into.
+    /// True when the device has a `system/thumbnails/` folder Bookshelf can write covers into.
     var supportsThumbnails: Bool { get }
     func thumbnailNames() throws -> Set<String>
     func writeThumbnail(_ bytes: [UInt8], named name: String) throws
@@ -91,7 +91,7 @@ public enum KindleStorageGuard {
 
 // MARK: - MTP
 
-/// Octavo's original transport, unchanged in behaviour: everything the engine used to do with
+/// Bookshelf's original transport, unchanged in behaviour: everything the engine used to do with
 /// the session directly now goes through here. Thumbnails are not offered over MTP — that path
 /// has not been checked on an MTP Kindle, and writing outside `documents/` is not something to
 /// do untested.
@@ -184,7 +184,7 @@ public final class MTPKindleStorage: KindleStorage {
 
 /// A Kindle mounted as a disk — the Kindle 10th generation and everything before the MTP
 /// models. Plain file I/O on the mounted volume, so it needs no USB code at all and claims
-/// nothing exclusively: Finder can browse the Kindle while Octavo is syncing it.
+/// nothing exclusively: Finder can browse the Kindle while Bookshelf is syncing it.
 ///
 /// The volume is FAT32, which shapes three details: writes go to a hidden temp file and are
 /// renamed into place, so an unplugged cable leaves a stray temp file rather than a truncated
@@ -199,7 +199,7 @@ public final class VolumeKindleStorage: KindleStorage {
 
     public var connection: KindleConnection { .usbDrive }
 
-    static let partialSuffix = ".octavo-part"
+    static let partialSuffix = ".bookshelf-part"
 
     public init(root: URL) throws {
         self.root = root

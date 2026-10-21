@@ -289,7 +289,7 @@ public struct MetadataFetcher: Sendable {
     private func decode<T: Decodable>(_ url: URL) async throws -> T {
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
-        request.setValue("Octavo/1.0 (personal Kindle library manager)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bookshelf/1.0 (personal Kindle library manager)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
 
         if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {

@@ -1,5 +1,5 @@
 #!/usr/bin/env swift
-// Draws Resources/Octavo.icon, the Liquid Glass counterpart to Octavo.icns. Run it by hand
+// Draws Resources/Bookshelf.icon, the Liquid Glass counterpart to Bookshelf.icns. Run it by hand
 // after changing the artwork:
 //
 //     swift Scripts/make-liquid-icon.swift
@@ -19,7 +19,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 let root = URL(filePath: FileManager.default.currentDirectoryPath)
-let bundle = root.appending(path: "Resources/Octavo.icon")
+let bundle = root.appending(path: "Resources/Bookshelf.icon")
 let assets = bundle.appending(path: "Assets")
 
 // MARK: - Palette (matches make-icon.swift)
@@ -78,7 +78,7 @@ func drawGlyph(in context: CGContext) {
     context.setFillColor(paperShade)
     context.fillPath()
 
-    // Fold lines: 1 vertical + 3 horizontal = the eight leaves of an octavo.
+    // Fold lines: 1 vertical + 3 horizontal = the eight leaves of an bookshelf.
     context.saveGState()
     context.addPath(page)
     context.clip()

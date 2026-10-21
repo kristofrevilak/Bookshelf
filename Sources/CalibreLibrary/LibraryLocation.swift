@@ -3,16 +3,19 @@ import Foundation
 /// Where the library lives, remembered across launches.
 ///
 /// Lives here rather than in the app so the CLIs resolve exactly what the app is showing. The
-/// suite name is the app's bundle identifier, which is what makes that work: for Octavo.app it is
+/// suite name is the app's bundle identifier, which is what makes that work: for Bookshelf.app it is
 /// the same store as `UserDefaults.standard`, for a CLI it is the app's plist rather than the
 /// CLI's own domain. A plain path, not a security-scoped bookmark — the app is unsandboxed.
 public enum LibraryLocation {
-    static let suiteName = "org.octavo.Octavo"
+    static let suiteName = "com.kristofrevilak.Bookshelf"
+    /// Octavo's suite. Bookshelf is a fork, so someone switching over finds the library Octavo
+    /// remembered rather than the welcome screen. Read only, never written.
+    static let legacySuiteName = "org.octavo.Octavo"
     static let key = "LibraryRoot"
     static let recentsKey = "RecentLibraries"
     static let recentsCap = 8
 
-    /// Inside Octavo.app the suite *is* our own domain, and asking for it by name returns nil with
+    /// Inside Bookshelf.app the suite *is* our own domain, and asking for it by name returns nil with
     /// "using your own bundle identifier as a suite name does not make sense" — so ask for it only
     /// from the CLIs, where the domain really is someone else's.
     private static var defaults: UserDefaults {
@@ -22,13 +25,17 @@ public enum LibraryLocation {
 
     /// Offered when there is nothing to resolve; named after the app, not calibre, because the
     /// user creating one here is precisely the user without calibre.
-    public static let suggested = URL.homeDirectory.appending(path: "Octavo Library")
+    public static let suggested = URL.homeDirectory.appending(path: "Bookshelf Library")
 
     /// The remembered library, else calibre's own if it happens to be there. `nil` means the user
     /// has not chosen yet — the caller offers to create one, and nothing is written until then.
     public static func resolve() -> URL? {
         if let saved = defaults.string(forKey: key), !saved.isEmpty {
             return URL(filePath: saved)
+        }
+        if let legacy = UserDefaults(suiteName: legacySuiteName)?.string(forKey: key), !legacy.isEmpty,
+           CalibreLibraryStore.isLibrary(at: URL(filePath: legacy)) {
+            return URL(filePath: legacy)
         }
         if CalibreLibraryStore.isLibrary(at: CalibreLibraryStore.defaultLocation) {
             return CalibreLibraryStore.defaultLocation

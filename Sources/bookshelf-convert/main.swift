@@ -1,7 +1,7 @@
 import Foundation
 import KindleFormat
 
-// Standalone converter for testing: octavo-convert <input> [output] [--format azw3|mobi]
+// Standalone converter for testing: bookshelf-convert <input> [output] [--format azw3|mobi]
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 let requested: ConversionTarget? = arguments.firstIndex(of: "--format").flatMap {
@@ -26,7 +26,7 @@ let positional: [String] = {
 }()
 
 guard let input = positional.first else {
-    print("Usage: octavo-convert <file.epub|cbz|fb2> [output] [--format azw3|mobi]")
+    print("Usage: bookshelf-convert <file.epub|cbz|fb2> [output] [--format azw3|mobi]")
     exit(1)
 }
 

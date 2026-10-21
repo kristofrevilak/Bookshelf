@@ -1,5 +1,5 @@
 import Testing
-@testable import Octavo
+@testable import Bookshelf
 
 /// `Filter.storageKey` is what "remember the last filter across launches" round-trips through
 /// `Preferences.lastFilter` — a typo here would silently fall back to `.all` on every relaunch.

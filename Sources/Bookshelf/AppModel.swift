@@ -747,7 +747,7 @@ final class AppModel {
                 // The writers are pure and CPU-bound: off the main actor, one book at a time.
                 let output = try await Task.detached(priority: .userInitiated) {
                     let directory = FileManager.default.temporaryDirectory
-                        .appending(path: "octavo-convert-\(UUID().uuidString)")
+                        .appending(path: "bookshelf-convert-\(UUID().uuidString)")
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     return try Converter.convert(
                         input, to: directory.appending(path: "book.azw3"), target: .azw3, asin: asin

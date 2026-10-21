@@ -2,7 +2,7 @@ import Compression
 import Foundation
 
 /// Minimal read-only ZIP reader — enough for EPUB and CBZ. Writing is not needed:
-/// nothing in Octavo produces a zip.
+/// nothing in Bookshelf produces a zip.
 public struct ZipArchive {
     public struct Entry: Sendable {
         public let path: String

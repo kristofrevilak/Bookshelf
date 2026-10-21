@@ -6,11 +6,11 @@ import Foundation
 /// because only NSSavePanel offers "pick a parent and name the new folder", which is what
 /// creating a library is. The app is unsandboxed, so the chosen path is usable as-is.
 enum LibraryPanels {
-    /// Where to put a new library. Defaults to ~/Octavo Library, one level up from the name field.
+    /// Where to put a new library. Defaults to ~/Bookshelf Library, one level up from the name field.
     static func chooseNewLibrary() -> URL? {
         let panel = NSSavePanel()
         panel.title = "New Library"
-        panel.message = "Choose where to keep your books. Octavo creates a folder there."
+        panel.message = "Choose where to keep your books. Bookshelf creates a folder there."
         panel.prompt = "Create"
         panel.nameFieldLabel = "Library name:"
         panel.nameFieldStringValue = LibraryLocation.suggested.lastPathComponent

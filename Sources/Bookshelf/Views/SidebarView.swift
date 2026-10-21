@@ -8,7 +8,7 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @State private var facetSearch = ""
 
-    // Same `org.octavo.Octavo` defaults suite as everything else backed by `@AppStorage`/
+    // Same `com.kristofrevilak.Bookshelf` defaults suite as everything else backed by `@AppStorage`/
     // `UserDefaults` in this app (see `LibraryLocation`) — it's the process's bundle id, not a
     // separate suite. Collapsed by default: a freshly launched sidebar should read as four
     // rows, not a wall of authors.

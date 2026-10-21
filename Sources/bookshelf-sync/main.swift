@@ -11,7 +11,7 @@ let apply = arguments.contains("--apply")
 let skipBackup = arguments.contains("--no-backup")
 let showOrphans = arguments.contains("--orphans")
 
-/// Overrides Octavo.app's Conversion setting for this run. Without it the CLI converts to
+/// Overrides Bookshelf.app's Conversion setting for this run. Without it the CLI converts to
 /// whatever the app is set to, the same way --library defaults to the resolved library.
 /// A bad value is fatal rather than ignored: writing the wrong format to the device is not
 /// something to fall back from quietly.
@@ -35,7 +35,7 @@ let libraryRoot: URL? = {
 }()
 
 guard let libraryRoot else {
-    print("No library. Pass --library <path>, or create one in Octavo.app.")
+    print("No library. Pass --library <path>, or create one in Bookshelf.app.")
     exit(1)
 }
 
@@ -107,12 +107,12 @@ do {
                 print("  ? \(object.filename) — \(humanSize(Int64(object.size)))")
             }
         } else {
-            print("  (full list: --orphans; Octavo leaves them alone)")
+            print("  (full list: --orphans; Bookshelf leaves them alone)")
         }
     }
 
     guard apply else {
-        print("\nThis is a dry run. Nothing was written. For a real sync: octavo-sync --apply")
+        print("\nThis is a dry run. Nothing was written. For a real sync: bookshelf-sync --apply")
         exit(0)
     }
 

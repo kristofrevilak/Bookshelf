@@ -9,7 +9,7 @@ public struct ConversionCache: Sendable {
     public let directory: URL
 
     public static let `default` = ConversionCache(
-        directory: URL.cachesDirectory.appending(path: "Octavo/converted")
+        directory: URL.cachesDirectory.appending(path: "Bookshelf/converted")
     )
 
     public init(directory: URL) {

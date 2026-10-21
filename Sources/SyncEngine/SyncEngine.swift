@@ -6,7 +6,7 @@ import MTPKit
 /// Formats the stock Kindle firmware can open from a sideloaded file, best first.
 public let kindleReadableFormats = ["KFX", "AZW3", "AZW", "MOBI", "PRC", "PDF", "TXT"]
 
-/// Formats Octavo can turn into one the Kindle opens, best first.
+/// Formats Bookshelf can turn into one the Kindle opens, best first.
 public let convertibleFormats = ["EPUB", "FB2", "CBZ"]
 
 public struct SendItem: Sendable {
@@ -74,17 +74,17 @@ public final class SyncEngine {
     /// Settings ▸ Sync ▸ Fix cover thumbnails. Only has an effect on USB-drive Kindles.
     public var writesThumbnails = true
 
-    /// Where `octavo-sync --apply` and the app's "back up before first sync" setting both pull
+    /// Where `bookshelf-sync --apply` and the app's "back up before first sync" setting both pull
     /// documents/ to, by default — one constant so the two agree without either hardcoding it.
     public static let defaultBackupDirectory = URL.homeDirectory
-        .appending(path: "Library/Application Support/Octavo/device-backup")
+        .appending(path: "Library/Application Support/Bookshelf/device-backup")
 
     public init(library: CalibreLibraryStore, device: KindleStorage) {
         self.library = library
         self.device = device
     }
 
-    /// The MTP path, as Octavo always had it.
+    /// The MTP path, as Bookshelf always had it.
     public convenience init(library: CalibreLibraryStore, session: MTPSession) throws {
         self.init(library: library, device: try MTPKindleStorage(session: session))
     }
@@ -251,7 +251,7 @@ public final class SyncEngine {
     /// `shouldStop` is polled between files; returning true ends the run early and still
     /// saves the manifest, so everything already sent stays recorded. It is declared *after*
     /// `onProgress` because a trailing closure binds by forward scan — put it first and
-    /// `octavo-sync`'s `execute(plan, manifest:) { progress in … }` would silently try to
+    /// `bookshelf-sync`'s `execute(plan, manifest:) { progress in … }` would silently try to
     /// bind its progress closure to `shouldStop`.
     @discardableResult
     public func execute(

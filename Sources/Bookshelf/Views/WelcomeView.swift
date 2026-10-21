@@ -7,9 +7,9 @@ struct WelcomeView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Welcome to Octavo", systemImage: "books.vertical")
+            Label("Welcome to Bookshelf", systemImage: "books.vertical")
         } description: {
-            Text("Choose where your books live. A library is a folder Octavo keeps your books and their metadata in.")
+            Text("Choose where your books live. A library is a folder Bookshelf keeps your books and their metadata in.")
         } actions: {
             VStack(spacing: 8) {
                 Button("Create Library…") {

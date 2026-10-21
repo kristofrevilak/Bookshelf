@@ -190,13 +190,13 @@ public enum KF8Writer {
         var items = ""
 
         for (index, entry) in document.toc.enumerated() {
-            let href = "octavo-toc-\(index)"
+            let href = "bookshelf-toc-\(index)"
             links[href] = BookDocument.LinkTarget(section: entry.sectionIndex, anchor: entry.anchor)
             items += "<li><a href=\"\(href)\">\(escape(entry.title))</a></li>"
         }
 
         document.sections.append(BookDocument.Section(
-            path: "octavo-toc.xhtml",
+            path: "bookshelf-toc.xhtml",
             xhtml: "<html><head><title>Table of Contents</title></head>"
                 + "<body><h1>Table of Contents</h1><ul>\(items)</ul></body></html>",
             links: links

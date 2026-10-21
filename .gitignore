@@ -8,8 +8,8 @@ xcuserdata/
 *.xcuserstate
 
 # tuist generate — regenerated from Project.swift, not checked in
-Octavo.xcodeproj/
-Octavo.xcworkspace/
+Bookshelf.xcodeproj/
+Bookshelf.xcworkspace/
 Derived/
 .tuist-bin/
 

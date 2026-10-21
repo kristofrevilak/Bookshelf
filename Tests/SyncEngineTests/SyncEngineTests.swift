@@ -117,7 +117,7 @@ private func makeObject(size: UInt64, name: String) -> DeviceFile {
 }
 
 /// A retarget must swap the extension and nothing else. calibre transliterates names differently
-/// than Octavo does, and the .sdr sidecar holding reading progress is named after the stem — so
+/// than Bookshelf does, and the .sdr sidecar holding reading progress is named after the stem — so
 /// re-deriving the name here would silently strand the user's place in the book.
 @Test func retargetKeepsTheStemSoSidecarsStayMatched() {
     let calibreName = "Zapovednik - Sergej Dovlatov.mobi"

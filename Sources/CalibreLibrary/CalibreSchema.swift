@@ -1,9 +1,9 @@
 // calibre's own schema, copied verbatim from
 // calibre.app/Contents/Resources/resources/metadata_sqlite.sql (calibre 8, user_version 26).
-// A library Octavo creates therefore opens in calibre with no migration, and the four triggers
+// A library Bookshelf creates therefore opens in calibre with no migration, and the four triggers
 // the rest of this module leans on (books_insert_trg, books_update_trg, series_insert_trg,
 // series_update_trg) come along with it. Kept as a string rather than a SwiftPM resource so
-// there is no bundle to carry into Octavo.app.
+// there is no bundle to carry into Bookshelf.app.
 enum CalibreSchema {
     static let sql = """
         CREATE TABLE authors ( id   INTEGER PRIMARY KEY,

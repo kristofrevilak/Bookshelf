@@ -41,10 +41,10 @@ private func makeJPEG(width: Int = 200, height: Int = 300) throws -> Data {
     return output as Data
 }
 
-/// A small AZW3 written by Octavo's own KF8 writer, with an ASIN like the sync's conversion gives it.
+/// A small AZW3 written by Bookshelf's own KF8 writer, with an ASIN like the sync's conversion gives it.
 private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
     var metadata = EbookMetadata(title: "Thumbnail Test")
-    metadata.authors = ["Octavo"]
+    metadata.authors = ["Bookshelf"]
     metadata.asin = asin
     var document = BookDocument(metadata: metadata)
     document.sections.append(BookDocument.Section(
@@ -163,7 +163,7 @@ private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
 /// the manifest remembers both, a re-plan sees nothing to do, and a thumbnail the firmware
 /// deletes comes back on the next connect.
 @Test func syncsToAMountedKindleAndKeepsTheCover() throws {
-    let temp = FileManager.default.temporaryDirectory.appending(path: "octavo-e2e-\(UUID().uuidString)")
+    let temp = FileManager.default.temporaryDirectory.appending(path: "bookshelf-e2e-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: temp) }
     try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
 
@@ -174,7 +174,7 @@ private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
     let store = try CalibreLibraryStore.create(at: temp.appending(path: "Library"))
     let azw3 = temp.appending(path: "source.azw3")
     try makeAZW3(asin: "asin-e2e-0001", cover: cover).write(to: azw3)
-    let book = try store.add(fileAt: azw3, metadata: NewBook(title: "Thumbnail Test", authors: ["Octavo"], cover: cover))
+    let book = try store.add(fileAt: azw3, metadata: NewBook(title: "Thumbnail Test", authors: ["Bookshelf"], cover: cover))
 
     let engine = SyncEngine(library: store, device: try VolumeKindleStorage(root: root))
     engine.conversionCache = ConversionCache(directory: temp.appending(path: "converted"))
@@ -212,7 +212,7 @@ private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
 /// Books already on the Kindle — calibre's, or sent before thumbnails existed — get one on the
 /// next sync, named from the ASIN inside the file on the device.
 @Test func backfillsThumbnailsForBooksAlreadyOnTheKindle() throws {
-    let temp = FileManager.default.temporaryDirectory.appending(path: "octavo-backfill-\(UUID().uuidString)")
+    let temp = FileManager.default.temporaryDirectory.appending(path: "bookshelf-backfill-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: temp) }
     try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
     let root = try makeKindleVolume()
@@ -222,7 +222,7 @@ private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
     let store = try CalibreLibraryStore.create(at: temp.appending(path: "Library"))
     let azw3 = temp.appending(path: "source.azw3")
     try makeAZW3(asin: "asin-old-0002").write(to: azw3)
-    let book = try store.add(fileAt: azw3, metadata: NewBook(title: "Old Book", authors: ["Octavo"], cover: cover))
+    let book = try store.add(fileAt: azw3, metadata: NewBook(title: "Old Book", authors: ["Bookshelf"], cover: cover))
 
     let engine = SyncEngine(library: store, device: try VolumeKindleStorage(root: root))
     engine.thumbnailCache = ThumbnailCache(directory: temp.appending(path: "thumbnails"))

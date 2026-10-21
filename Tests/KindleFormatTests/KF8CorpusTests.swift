@@ -114,7 +114,7 @@ import Testing
 /// The invariant that a self-consistent reader cannot check on its own.
 ///
 /// Text records must be **exactly** `textRecordSize` uncompressed bytes, because the reader
-/// locates flow offset N by dividing it by that size. Octavo shipped records shortened to UTF-8
+/// locates flow offset N by dividing it by that size. Bookshelf shipped records shortened to UTF-8
 /// character boundaries once; every index in the file drifted after the first split character,
 /// and a Cyrillic book rendered from the middle of a tag and could not be paged. Nothing in the
 /// suite caught it, because the writer and the reader shared the assumption.

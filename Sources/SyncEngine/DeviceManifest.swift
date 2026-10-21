@@ -1,6 +1,6 @@
 import Foundation
 
-/// What Octavo believes is on the device, keyed by calibre book uuid.
+/// What Bookshelf believes is on the device, keyed by calibre book uuid.
 /// Stored on the device itself at `documents/.octavo.json`, so the mapping survives
 /// renames in the library and a reinstall of the app.
 public struct DeviceManifest: Codable, Sendable {
@@ -39,6 +39,8 @@ public struct DeviceManifest: Codable, Sendable {
         }
     }
 
+    /// Octavo's name, kept on purpose: Bookshelf is a fork, and sharing the file means either
+    /// app can sync the same Kindle without re-sending everything.
     public static let filename = ".octavo.json"
 
     public var entries: [String: Entry]

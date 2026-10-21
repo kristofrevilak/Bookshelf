@@ -1,6 +1,6 @@
 import Foundation
 
-/// Everything Octavo can learn about a book from the file itself.
+/// Everything Bookshelf can learn about a book from the file itself.
 public struct EbookMetadata: Sendable {
     public var title: String
     public var authors: [String] = []
@@ -25,7 +25,7 @@ public struct EbookMetadata: Sendable {
 }
 
 public enum EbookReader {
-    /// Formats Octavo can pull metadata out of. Anything else falls back to the filename.
+    /// Formats Bookshelf can pull metadata out of. Anything else falls back to the filename.
     public static func metadata(of url: URL) -> EbookMetadata {
         let fallback = EbookMetadata(title: url.deletingPathExtension().lastPathComponent)
         switch url.pathExtension.lowercased() {

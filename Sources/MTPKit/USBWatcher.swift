@@ -36,7 +36,7 @@ public enum USBWatcher {
     /// Every member is touched only on `queue`, which is also the notification port's
     /// delivery queue — hence the unchecked conformance and the absence of any lock.
     final class Context: @unchecked Sendable {
-        let queue = DispatchQueue(label: "org.octavo.usb.watcher")
+        let queue = DispatchQueue(label: "com.kristofrevilak.bookshelf.usb.watcher")
         let continuation: AsyncStream<USBEvent>.Continuation
         let vendorID: Int
 
@@ -56,7 +56,7 @@ public enum USBWatcher {
             }
             self.port = port
             // A dispatch queue rather than a run loop source: MTPKit has to keep working in
-            // mtpprobe and octavo-sync, neither of which runs a run loop.
+            // mtpprobe and bookshelf-sync, neither of which runs a run loop.
             IONotificationPortSetDispatchQueue(port, queue)
 
             // One retain, balanced by exactly one release in stop().

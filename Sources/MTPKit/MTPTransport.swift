@@ -78,7 +78,7 @@ public final class MTPTransport {
     }
 
     static func claim(interfaceService: io_service_t, device: USBDeviceDescriptorInfo) throws -> MTPTransport {
-        let queue = DispatchQueue(label: "org.octavo.mtp.transport")
+        let queue = DispatchQueue(label: "com.kristofrevilak.bookshelf.mtp.transport")
         let interface: IOUSBHostInterface
         do {
             interface = try IOUSBHostInterface(
