@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # From the Actions tab: Release ▸ Run workflow, with a version. The release is created at the
+  # commit the run is on and gh creates the tag with it, so no tag push is needed.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, without the v (e.g. 0.5.0)'
+        required: true
 
 permissions:
   contents: write
@@ -29,8 +36,14 @@ jobs:
 
       - name: Derive version from the tag
         id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="v${INPUT_VERSION#v}"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
           version="${tag#v}"
           {
             echo "tag=$tag"
@@ -148,10 +161,16 @@ jobs:
 
       - name: Create the GitHub release
         run: |
+          # A tag push already has its tag; a manual run creates it at this commit.
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            where=(--target "$GITHUB_SHA")
+          else
+            where=(--verify-tag)
+          fi
           gh release create "${{ steps.v.outputs.tag }}" \
             --title "Bookshelf ${{ steps.v.outputs.version }}" \
             --generate-notes \
-            --verify-tag \
+            "${where[@]}" \
             --prerelease=${{ steps.v.outputs.prerelease }} \
             dist/*
 
