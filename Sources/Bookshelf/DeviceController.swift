@@ -185,6 +185,13 @@ actor DeviceController {
         return removed
     }
 
+    /// Deletes files on the Kindle that no library book claims. The engine re-checks each path
+    /// against a fresh plan, so only real orphans go.
+    @discardableResult
+    func deleteOrphans(_ paths: [String], books: [Book]) throws -> Int {
+        try requireEngine().deleteOrphans(paths, books: books)
+    }
+
     private func requireEngine() throws -> SyncEngine {
         if let engine { return engine }
         _ = try connect()

@@ -147,6 +147,18 @@ by us) in files no entry claims. It only reads when partial reads are cheap (`re
 drive) and only unclaimed files, so a settled device reads nothing. Without it, books calibre sent
 but never recorded would be sent a second time and show up twice.
 
+**Format upgrades only for our own conversions.** `needsRetarget` fires only when the manifest
+entry's `format` is a convertible source (EPUB/FB2/CBZ), i.e. Bookshelf converted that copy. A copy
+calibre made or one found by matching records the device file's own format and is left alone even
+if the library has only an EPUB: replacing it is a new file, and the user's reading progress is
+the reason not to. (Octavo retargeted calibre's MOBIs to AZW3; Bookshelf deliberately does not.)
+
+**Orphans.** `SyncPlan.orphans` are device files no book claims, minus the Kindle's own
+(`My Clippings.txt`) and our manifest; `orphanDetails` holds the title/authors read from each one's
+record 0 (USB drive only). "On device" lists them under the library's books
+(`OrphanFilesView`) for cleanup; `SyncEngine.deleteOrphans` re-plans and refuses anything that is
+not an orphan any more, and never touches `.sdr` folders.
+
 The USB-drive path is covered end to end by `USBDriveTests`, against a temp folder laid out like
 the Kindle's volume — no device needed.
 

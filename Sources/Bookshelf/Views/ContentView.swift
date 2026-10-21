@@ -174,7 +174,16 @@ struct BookTable: View {
                     }
                 }
             case .loaded:
-                table
+                // "On device" also lists what is on the Kindle but not in the library, below
+                // the library's own books, so the device can be cleaned up from one place.
+                if model.filter == .onDevice, model.isConnected, !model.orphans.isEmpty {
+                    VSplitView {
+                        table.frame(minHeight: 160)
+                        OrphanFilesView().frame(minHeight: 140, idealHeight: 260)
+                    }
+                } else {
+                    table
+                }
             }
         }
         .navigationTitle(model.filter.title)

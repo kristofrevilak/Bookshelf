@@ -115,6 +115,10 @@ final class AppModel {
     /// Books queued for the device-removal confirmation dialog; empty means the dialog is
     /// dismissed. Set directly by `requestRemoval` when confirmation is off.
     var pendingRemoval: [Book] = []
+    /// Device files (paths in documents/) queued for the delete confirmation in "On device".
+    var pendingOrphanDeletion: [String] = []
+    /// Selection in the "Not in your library" list under "On device".
+    var orphanSelection: Set<String> = []
     /// Drives `ContentView`'s `.fileImporter`, from both the toolbar's Add button and
     /// File ▸ Add Books….
     var isImportingFiles = false
@@ -665,6 +669,56 @@ final class AppModel {
             guard epoch == deviceEpoch else { return }
             deviceState = .failed(error.localizedDescription)
         }
+    }
+
+    /// Files on the Kindle no library book claims, best known name first. Empty without a plan.
+    var orphans: [DeviceFile] {
+        (plan?.orphans ?? []).sorted {
+            orphanTitle($0).localizedStandardCompare(orphanTitle($1)) == .orderedAscending
+        }
+    }
+
+    func orphanTitle(_ file: DeviceFile) -> String {
+        plan?.orphanDetails[file.filename]?.title
+            ?? ((file.filename as NSString).lastPathComponent as NSString).deletingPathExtension
+    }
+
+    func orphanAuthors(_ file: DeviceFile) -> String? {
+        let authors = plan?.orphanDetails[file.filename]?.authors ?? []
+        return authors.isEmpty ? nil : authors.joined(separator: ", ")
+    }
+
+    func requestOrphanDeletion(_ paths: [String]) {
+        guard !paths.isEmpty else { return }
+        if Preferences.shared.confirmDeviceRemoval {
+            pendingOrphanDeletion = paths
+        } else {
+            Task { await deleteOrphans(paths) }
+        }
+    }
+
+    /// Deletes files from the Kindle that are not in the library. `.sdr` folders stay.
+    func deleteOrphans(_ paths: [String]) async {
+        guard isConnected, syncProgress == nil, !paths.isEmpty else { return }
+        let epoch = deviceEpoch
+        do {
+            let deleted = try await device.deleteOrphans(paths, books: books)
+            guard epoch == deviceEpoch else { return }
+            orphanSelection.subtract(paths)
+            lastSyncSummary = "Deleted from the Kindle: \(deleted)"
+            deviceState = .connected(try await device.snapshot())
+            await refreshPlan()
+        } catch {
+            guard epoch == deviceEpoch else { return }
+            deviceState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Finder can show files on a USB-drive Kindle; over MTP there is nothing to reveal.
+    func revealOnKindle(_ paths: [String]) async {
+        guard isUSBDrive, let volume = await device.volumeURL else { return }
+        let documents = volume.appending(path: "documents")
+        NSWorkspace.shared.activateFileViewerSelecting(paths.map { documents.appending(path: $0) })
     }
 
     /// Queues the device-removal confirmation, or skips straight to it when the user has

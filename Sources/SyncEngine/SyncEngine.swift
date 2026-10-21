@@ -37,6 +37,14 @@ public struct SyncPlan: Sendable {
     public var unsupported: [Book] = []
     /// Files in documents/ that no library book claims.
     public var orphans: [DeviceFile] = []
+    /// What the orphans say about themselves (title, authors), keyed by `DeviceFile.filename`.
+    /// Filled where reading a file's start is cheap (USB drive); empty otherwise.
+    public var orphanDetails: [String: OrphanDetail] = [:]
+
+    public struct OrphanDetail: Sendable, Hashable {
+        public var title: String?
+        public var authors: [String]
+    }
 
     public var totalBytes: Int64 { send.reduce(0) { $0 + $1.format.size } }
     public var isEmpty: Bool { send.isEmpty }
@@ -261,9 +269,41 @@ public final class SyncEngine {
         }
 
         plan.orphans = onDevice.filter {
-            !claimed.contains($0.filename.lowercased()) && $0.filename != DeviceManifest.filename
+            !claimed.contains($0.filename.lowercased()) && !Self.isKindleOwned($0.filename)
+        }
+        if device.readsPartially {
+            for file in plan.orphans
+            where Self.thumbnailExtensions.contains((file.filename as NSString).pathExtension.lowercased()) {
+                guard let prefix = try? device.readDocumentPrefix(named: file.filename, length: Self.identityPrefixLength),
+                      let summary = MOBIReader.recordZeroSummary(of: Data(prefix))
+                else { continue }
+                plan.orphanDetails[file.filename] = SyncPlan.OrphanDetail(title: summary.title, authors: summary.authors)
+            }
         }
         return plan
+    }
+
+    /// Files in `documents/` that belong to the Kindle or to us rather than to a book: never
+    /// offered as orphans, so never offered for deletion. "My Clippings.txt" holds every
+    /// highlight and note made on the device.
+    static func isKindleOwned(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent.lowercased()
+        return name == DeviceManifest.filename || name == "my clippings.txt"
+    }
+
+    /// Deletes files the plan listed as orphans. Re-checked against a fresh plan, so a file that
+    /// has since been claimed by a book — or anything that was never an orphan — is refused.
+    /// `.sdr` reading-progress folders are not touched.
+    @discardableResult
+    public func deleteOrphans(_ paths: [String], books: [Book]) throws -> Int {
+        let current = try plan(books: books, manifest: reconciledManifest(books: books))
+        let orphans = Set(current.orphans.map { $0.filename.lowercased() })
+        var deleted = 0
+        for path in paths where orphans.contains(path.lowercased()) {
+            try device.deleteDocument(named: path)
+            deleted += 1
+        }
+        return deleted
     }
 
     /// A device copy is stale when the file on the device is not the one we recorded,
@@ -282,8 +322,13 @@ public final class SyncEngine {
     /// True when the device copy was converted to a different format than the one now wanted.
     /// Separate from `isStale` because it needs the desired target rather than the recorded
     /// past, and separate from `plan` so it can be tested without a device.
+    ///
+    /// Only for copies Bookshelf converted itself — the entry's `format` is then the library
+    /// source (EPUB/FB2/CBZ). A copy calibre made, or one found on the device by matching, records
+    /// the device file's own format: it is a finished Kindle book and is left alone, because
+    /// replacing it is a new file the Kindle may not tie back to its reading progress.
     static func needsRetarget(entry: DeviceManifest.Entry, target: ConversionTarget?) -> Bool {
-        guard let target else { return false }
+        guard let target, convertibleFormats.contains(entry.format.uppercased()) else { return false }
         return (entry.filename as NSString).pathExtension.lowercased() != target.fileExtension
     }
 

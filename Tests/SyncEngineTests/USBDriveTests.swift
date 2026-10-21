@@ -363,6 +363,31 @@ private func makeAZW3(asin: String?, cover: Data? = nil, title: String = "Thumbn
     #expect(manifest.entries[guide.uuid]?.filename == "Schafler, Morgan Katherine/The perfectionist's guide to losing control.mobi")
     #expect(manifest.entries[stories.uuid] == nil)
 
+    // The library has only an EPUB; the Kindle has calibre's MOBI. That copy is the book on
+    // the device — it must count as up to date, not be "upgraded" to AZW3 over the user's
+    // reading progress.
+    try "".write(to: documents.appending(path: "My Clippings.txt"), atomically: true, encoding: .utf8)
+    let books = try store.books()
+    let plan = try engine.plan(books: books, manifest: manifest)
+    #expect(plan.upToDate.map(\.uuid).contains(guide.uuid))
+    #expect(!plan.send.contains { $0.book.uuid == guide.uuid })
+
+    // What is left over is offered for cleanup, described from the file itself; the Kindle's
+    // own clippings file never is.
+    #expect(plan.orphans.map(\.filename) == ["Collected Stories - Someone Else.azw3"])
+    #expect(plan.orphanDetails["Collected Stories - Someone Else.azw3"]?.authors == ["Someone Else"])
+
+    // Deleting refuses anything that is not an orphan, and removes the orphan.
+    let deleted = try engine.deleteOrphans(
+        ["Collected Stories - Someone Else.azw3",
+         "Schafler, Morgan Katherine/The perfectionist's guide to losing control.mobi",
+         "My Clippings.txt"],
+        books: books
+    )
+    #expect(deleted == 1)
+    let remaining = try engine.documentsChildren().filter { !$0.isFolder }.map(\.filename)
+    #expect(Set(remaining) == ["Schafler, Morgan Katherine/The perfectionist's guide to losing control.mobi", "My Clippings.txt"])
+
     #expect(SyncEngine.matchKey("Jeseň") == SyncEngine.matchKey("jesen"))
     #expect(SyncEngine.matchKey("The Perfectionist’s Guide") == SyncEngine.matchKey("the perfectionists guide"))
 }
