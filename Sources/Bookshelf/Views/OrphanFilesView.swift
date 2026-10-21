@@ -41,6 +41,15 @@ struct OrphanFilesView: View {
                 }
                 .width(60)
 
+                TableColumn("On Kindle") { file in
+                    if let date = file.modified {
+                        Text(date, format: .dateTime.day().month(.abbreviated).year())
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .width(min: 80, ideal: 96)
+
                 TableColumn("Size") { file in
                     Text(ByteCountFormatter.string(fromByteCount: Int64(file.size), countStyle: .file))
                         .foregroundStyle(.secondary)

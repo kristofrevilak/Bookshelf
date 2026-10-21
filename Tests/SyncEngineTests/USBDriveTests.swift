@@ -391,3 +391,66 @@ private func makeAZW3(asin: String?, cover: Data? = nil, title: String = "Thumbn
     #expect(SyncEngine.matchKey("Jeseň") == SyncEngine.matchKey("jesen"))
     #expect(SyncEngine.matchKey("The Perfectionist’s Guide") == SyncEngine.matchKey("the perfectionists guide"))
 }
+
+// MARK: - Format choice and dates
+
+/// AZW3 as it is first; otherwise an EPUB converted, even when a MOBI or PDF is also there;
+/// MOBI, PDF or TXT as they are only when there is nothing to convert.
+@Test func prefersConvertingToAZW3OverSendingMOBIOrPDF() throws {
+    let temp = FileManager.default.temporaryDirectory.appending(path: "bookshelf-choice-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let root = try makeKindleVolume()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = try CalibreLibraryStore.create(at: temp.appending(path: "Library"))
+    let engine = SyncEngine(library: store, device: try VolumeKindleStorage(root: root))
+
+    func book(_ formats: String...) -> Book {
+        Book(id: 1, uuid: "u", title: "T", sort: "T", authors: ["A"], authorSort: "A", path: "A/T (1)",
+             formats: formats.map { BookFormat(format: $0, name: "T - A", size: 10) })
+    }
+    #expect(engine.sendChoice(for: book("AZW3", "EPUB", "PDF"))?.0.format == "AZW3")
+    #expect(engine.sendChoice(for: book("AZW3", "EPUB"))?.1 == nil)
+    #expect(engine.sendChoice(for: book("PDF", "EPUB"))?.0.format == "EPUB")
+    #expect(engine.sendChoice(for: book("PDF", "EPUB"))?.1 == .azw3)
+    #expect(engine.sendChoice(for: book("MOBI", "EPUB"))?.0.format == "EPUB")
+    #expect(engine.sendChoice(for: book("MOBI"))?.0.format == "MOBI")
+    #expect(engine.sendChoice(for: book("MOBI"))?.1 == nil)
+    #expect(engine.sendChoice(for: book("DJVU")) == nil)
+}
+
+/// "On Kindle" for a book we sent is the send time; for calibre's copy, the file's date.
+@Test func knowsWhenEachBookArrivedOnTheKindle() throws {
+    let temp = FileManager.default.temporaryDirectory.appending(path: "bookshelf-dates-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: temp) }
+    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+    let root = try makeKindleVolume()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let documents = root.appending(path: "documents")
+
+    let store = try CalibreLibraryStore.create(at: temp.appending(path: "Library"))
+    let source = temp.appending(path: "b.azw3")
+    try makeAZW3(asin: nil, title: "Old", authors: ["A"]).write(to: source)
+    let old = try store.add(fileAt: source, metadata: NewBook(title: "Old", authors: ["A"]))
+    try makeAZW3(asin: nil, title: "New", authors: ["A"]).write(to: source)
+    let new = try store.add(fileAt: source, metadata: NewBook(title: "New", authors: ["A"]))
+
+    // calibre's copy of "Old", copied there a year ago.
+    let oldFile = documents.appending(path: "Old - A.azw3")
+    try makeAZW3(asin: old.uuid, title: "Old", authors: ["A"]).write(to: oldFile)
+    let aYearAgo = Date(timeIntervalSinceNow: -365 * 86_400)
+    try FileManager.default.setAttributes([.modificationDate: aYearAgo], ofItemAtPath: oldFile.path(percentEncoded: false))
+
+    let engine = SyncEngine(library: store, device: try VolumeKindleStorage(root: root))
+    engine.writesThumbnails = false
+    let books = try store.books()
+    let before = try engine.plan(books: books, manifest: engine.reconciledManifest(books: books))
+    let found = try #require(before.onDeviceSince[old.uuid])
+    #expect(abs(found.timeIntervalSince(aYearAgo)) < 2)
+    #expect(before.onDeviceSince[new.uuid] == nil)
+
+    let start = Date()
+    _ = try engine.execute(before, manifest: engine.reconciledManifest(books: books))
+    let after = try engine.plan(books: books, manifest: engine.reconciledManifest(books: books))
+    let sent = try #require(after.onDeviceSince[new.uuid])
+    #expect(sent >= start.addingTimeInterval(-1))
+}

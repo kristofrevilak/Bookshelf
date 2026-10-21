@@ -26,6 +26,7 @@ final class Preferences {
         static let lastFilter = "library.lastFilter"
         static let confirmRemoval = "device.confirmRemoval"
         static let fixCoverThumbnails = "sync.fixCoverThumbnails"
+        static let saveConversions = "conversion.saveToLibrary"
         static let googleBooksAPIKey = "GoogleBooksAPIKey"
         static let useOpenLibrary = "metadata.useOpenLibrary"
         static let useFantLab = "metadata.useFantLab"
@@ -49,6 +50,8 @@ final class Preferences {
     /// calibre's Kindle cover fix: write cover thumbnails and put back the ones the firmware
     /// deletes. USB-drive Kindles only.
     var fixCoverThumbnails: Bool { didSet { defaults.set(fixCoverThumbnails, forKey: Key.fixCoverThumbnails) } }
+    /// calibre's behaviour: a book converted for the Kindle keeps its AZW3 as a library format.
+    var saveConversionsToLibrary: Bool { didSet { defaults.set(saveConversionsToLibrary, forKey: Key.saveConversions) } }
 
     /// Legacy key, kept exactly as `MetadataFetcher` already reads it — this is the only
     /// writer, giving the field in Settings ▸ Metadata somewhere to save to.
@@ -71,6 +74,7 @@ final class Preferences {
         rememberLastFilter = defaults.object(forKey: Key.rememberFilter) as? Bool ?? true
         confirmDeviceRemoval = defaults.object(forKey: Key.confirmRemoval) as? Bool ?? true
         fixCoverThumbnails = defaults.object(forKey: Key.fixCoverThumbnails) as? Bool ?? true
+        saveConversionsToLibrary = defaults.object(forKey: Key.saveConversions) as? Bool ?? true
         lastFilter = defaults.string(forKey: Key.lastFilter) ?? "all"
         googleBooksAPIKey = defaults.string(forKey: Key.googleBooksAPIKey) ?? ""
         useOpenLibrary = defaults.object(forKey: Key.useOpenLibrary) as? Bool ?? true

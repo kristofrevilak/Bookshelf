@@ -6,6 +6,13 @@ import MTPKit
 /// Formats the stock Kindle firmware can open from a sideloaded file, best first.
 public let kindleReadableFormats = ["KFX", "AZW3", "AZW", "MOBI", "PRC", "PDF", "TXT"]
 
+/// Sent as they are, ahead of converting anything: the Kindle's own modern formats.
+public let preferredKindleFormats = ["KFX", "AZW3", "AZW"]
+
+/// Sent as they are only when there is nothing to convert to AZW3: MOBI 6 drops every
+/// stylesheet, and a PDF or TXT does not reflow — an EPUB alongside makes a better Kindle book.
+public let fallbackKindleFormats = ["MOBI", "PRC", "PDF", "TXT"]
+
 /// Formats Bookshelf can turn into one the Kindle opens, best first.
 public let convertibleFormats = ["EPUB", "FB2", "CBZ"]
 
@@ -40,6 +47,10 @@ public struct SyncPlan: Sendable {
     /// What the orphans say about themselves (title, authors), keyed by `DeviceFile.filename`.
     /// Filled where reading a file's start is cheap (USB drive); empty otherwise.
     public var orphanDetails: [String: OrphanDetail] = [:]
+    /// When each book's current copy arrived on the device, keyed by book uuid. Ours: when we
+    /// sent it. calibre's or matched ones: the file's modification date, which is when calibre
+    /// copied it there.
+    public var onDeviceSince: [String: Date] = [:]
 
     public struct OrphanDetail: Sendable, Hashable {
         public var title: String?
@@ -217,13 +228,10 @@ public final class SyncEngine {
         var claimed = Set<String>()
 
         for book in books {
-            let readable = bestFormat(for: book)
-            let convertible = readable == nil ? convertibleFormat(for: book) : nil
-            guard let format = readable ?? convertible else {
+            guard let (format, target) = sendChoice(for: book) else {
                 if !book.formats.isEmpty { plan.unsupported.append(book) }
                 continue
             }
-            let target = readable == nil ? conversionTarget : nil
 
             let entry = manifest.entries[book.uuid]
             let existing = entry.flatMap { byName[$0.filename.lowercased()] }
@@ -247,6 +255,11 @@ public final class SyncEngine {
             let filename = usableEntryName.map { name in
                 retarget ? Self.retargeted(name, to: target) : name
             } ?? Self.targetFilename(for: book, format: format, convertedTo: target)
+
+            if let entry, let existing {
+                plan.onDeviceSince[book.uuid] = entry.sentAt > .distantPast.addingTimeInterval(1)
+                    ? entry.sentAt : existing.modified
+            }
 
             guard let entry, let existing else {
                 plan.send.append(SendItem(
@@ -339,11 +352,26 @@ public final class SyncEngine {
         return "\((filename as NSString).deletingPathExtension).\(target.fileExtension)"
     }
 
-    public func bestFormat(for book: Book) -> BookFormat? {
-        for name in kindleReadableFormats {
+    /// What to send for a book, and what to convert it to on the way: the Kindle's own formats
+    /// as they are; else an EPUB/FB2/CBZ converted to `conversionTarget`; else MOBI, PDF or TXT
+    /// as they are. `nil` when the Kindle can do nothing with any of the book's formats.
+    public func sendChoice(for book: Book) -> (BookFormat, ConversionTarget?)? {
+        if let format = Self.first(of: preferredKindleFormats, in: book) { return (format, nil) }
+        if let format = convertibleFormat(for: book) { return (format, conversionTarget) }
+        if let format = Self.first(of: fallbackKindleFormats, in: book) { return (format, nil) }
+        return nil
+    }
+
+    static func first(of names: [String], in book: Book) -> BookFormat? {
+        for name in names {
             if let format = book.format(name) { return format }
         }
         return nil
+    }
+
+    /// Any format the Kindle opens as it is. Kept for callers that only ask "is it readable".
+    public func bestFormat(for book: Book) -> BookFormat? {
+        Self.first(of: kindleReadableFormats, in: book)
     }
 
     /// The best source to convert when nothing on the book is directly readable.
@@ -429,7 +457,9 @@ public final class SyncEngine {
             if let replaced = item.replaces, replaced.caseInsensitiveCompare(item.filename) != .orderedSame {
                 try device.deleteDocument(named: replaced)
             }
-            try device.writeDocument(Array(data), named: item.filename, modified: item.book.lastModified)
+            // Stamped with the send time: the file date is what "On Kindle" shows for a copy
+            // the manifest has no send date for.
+            try device.writeDocument(Array(data), named: item.filename, modified: Date())
 
             // Best effort: a missing cover must not fail the book it belongs to.
             let thumbnail = try? writeThumbnail(for: item.book, bookBytes: data)
@@ -459,7 +489,7 @@ public final class SyncEngine {
     public func pruneConversionCache(books: [Book]) {
         var wanted: Set<String> = []
         for book in books {
-            guard bestFormat(for: book) == nil, let source = convertibleFormat(for: book) else { continue }
+            guard let (source, target) = sendChoice(for: book), target != nil else { continue }
             wanted.insert(
                 conversionCache.cachedURL(for: book, source: source, target: conversionTarget)
                     .lastPathComponent

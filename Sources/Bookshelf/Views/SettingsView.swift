@@ -135,6 +135,15 @@ private struct ConversionSettingsTab: View {
                 Task { await model.refreshPlan() }
             }
 
+            Section {
+                Toggle("Save converted books to the library", isOn: $preferences.saveConversionsToLibrary)
+                    .disabled(preferences.conversionTarget != .azw3)
+            } footer: {
+                Text("When a book is sent from its EPUB, FB2 or CBZ, its AZW3 is added to the book in your library — as calibre does — instead of only being cached. Books already on the Kindle are never converted again.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             LabeledContent("Cache location") {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(ConversionCache.default.directory.path(percentEncoded: false))

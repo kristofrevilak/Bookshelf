@@ -233,6 +233,25 @@ struct BookTable: View {
                     .foregroundStyle(.secondary)
             }
             .width(110)
+
+            // calibre's "Date added" (books.timestamp).
+            TableColumn("Added", value: \.timestamp) { book in
+                Text(book.timestamp, format: .dateTime.day().month(.abbreviated).year())
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .width(min: 80, ideal: 96)
+
+            // When the copy on the Kindle arrived there; blank when it is not on the Kindle.
+            TableColumn("On Kindle") { book in
+                if let date = model.onDeviceSince(book) {
+                    Text(date, format: .dateTime.day().month(.abbreviated).year())
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .help(date.formatted(date: .complete, time: .shortened))
+                }
+            }
+            .width(min: 80, ideal: 96)
         }
         .contextMenu(forSelectionType: Book.ID.self) { ids in
             menu(for: ids)

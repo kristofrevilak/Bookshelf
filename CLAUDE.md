@@ -153,6 +153,17 @@ calibre made or one found by matching records the device file's own format and i
 if the library has only an EPUB: replacing it is a new file, and the user's reading progress is
 the reason not to. (Octavo retargeted calibre's MOBIs to AZW3; Bookshelf deliberately does not.)
 
+**What gets sent.** `SyncEngine.sendChoice`: KFX/AZW3/AZW as they are; else EPUB/FB2/CBZ converted
+to the target, even when a MOBI, PDF or TXT is also there; else those as they are. With Settings ▸
+Conversion ▸ "Save converted books to the library" (on by default, AZW3 target only),
+`AppModel.sync` first converts the run's to-be-converted books into the library
+(`convertIntoLibrary`, shared with Convert to AZW3), reloads, re-plans, then syncs — so the AZW3
+is a real format and goes out as-is. Already-sent books are untouched (see retargeting above).
+
+**Dates.** The library table's "Added" is calibre's `timestamp`. "On Kindle" comes from
+`SyncPlan.onDeviceSince`: the manifest's `sentAt` for our sends, else the device file's
+modification date (calibre's copy time). Our writes stamp the file with the send time.
+
 **Orphans.** `SyncPlan.orphans` are device files no book claims, minus the Kindle's own
 (`My Clippings.txt`) and our manifest; `orphanDetails` holds the title/authors read from each one's
 record 0 (USB drive only). "On device" lists them under the library's books

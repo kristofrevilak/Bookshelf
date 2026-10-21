@@ -591,7 +591,6 @@ final class AppModel {
         syncCancellation = flag
         isCancellingSync = false
 
-        let books = self.books
         let planned = only.map { ids in pendingSends(in: ids).count } ?? plan?.send.count ?? 0
         syncProgress = SyncProgress(current: "Preparing…", index: 0, total: planned)
         defer {
@@ -599,6 +598,30 @@ final class AppModel {
             syncCancellation = nil
             isCancellingSync = false
         }
+
+        // Books about to be converted on the way out get their AZW3 saved into the library
+        // first, the way calibre does, so the library keeps it and the sync sends it as-is.
+        // Only books in this run, and only AZW3 — a MOBI target stays a cache-only conversion.
+        var conversionFailures: [String] = []
+        if Preferences.shared.saveConversionsToLibrary, Preferences.shared.conversionTarget == .azw3,
+           let store {
+            let ids = only ?? Set((plan?.send ?? []).map(\.book.id))
+            let toConvert = (plan?.send ?? [])
+                .filter { ids.contains($0.book.id) && $0.conversion == .azw3 }
+                .map(\.book)
+            if !toConvert.isEmpty {
+                let result = await convertIntoLibrary(toConvert, store: store, flag: flag)
+                conversionFailures = result.failures
+                guard epoch == deviceEpoch, !flag.isCancelled else {
+                    loadLibrary()
+                    if flag.isCancelled { lastSyncSummary = "Sync cancelled" }
+                    return
+                }
+                loadLibrary()
+                await refreshPlan()
+            }
+        }
+        let books = self.books
 
         if Preferences.shared.backupBeforeFirstSync, !hasBackedUpThisSession {
             do {
@@ -642,9 +665,10 @@ final class AppModel {
             guard epoch == deviceEpoch else { return }
             // A USB-drive Kindle only picks new books up once it is ejected.
             let ejectHint = isUSBDrive && !done.send.isEmpty ? " — eject the Kindle to see them" : ""
+            let failed = conversionFailures.isEmpty ? "" : " — \(conversionFailures.count) could not be converted"
             lastSyncSummary = flag.isCancelled
                 ? "Sync cancelled"
-                : (done.send.isEmpty ? "Everything was up to date" : "Books sent: \(done.send.count)\(ejectHint)")
+                : (done.send.isEmpty ? "Everything was up to date" : "Books sent: \(done.send.count)\(ejectHint)") + failed
             deviceState = .connected(try await device.snapshot())
             await refreshPlan()
         } catch {
@@ -669,6 +693,12 @@ final class AppModel {
             guard epoch == deviceEpoch else { return }
             deviceState = .failed(error.localizedDescription)
         }
+    }
+
+    /// When this book's copy arrived on the Kindle; `nil` when it is not there or no Kindle is
+    /// connected.
+    func onDeviceSince(_ book: Book) -> Date? {
+        plan?.onDeviceSince[book.uuid]
     }
 
     /// Files on the Kindle no library book claims, best known name first. Empty without a plan.
@@ -781,7 +811,6 @@ final class AppModel {
             return
         }
 
-        let root = libraryRoot
         let flag = CancellationFlag()
         syncCancellation = flag
         isCancellingSync = false
@@ -791,6 +820,25 @@ final class AppModel {
             isCancellingSync = false
         }
 
+        let (converted, failures) = await convertIntoLibrary(candidates, store: store, flag: flag)
+        loadLibrary()
+        var summary = flag.isCancelled ? "Conversion cancelled — " : ""
+        summary += "Converted to AZW3: \(converted)"
+        if !failures.isEmpty { summary += ", failed: \(failures.count) (\(failures[0]))" }
+        lastSyncSummary = summary
+        await refreshPlan()
+    }
+
+    /// Converts each book's EPUB/FB2/CBZ to AZW3 and adds it to the library as a format of the
+    /// book, reporting through the sync overlay. Shared by Convert to AZW3 and by a sync with
+    /// Settings ▸ Conversion ▸ "Save converted books to the library" on. The caller owns the
+    /// overlay's lifecycle and reloads the library afterwards.
+    private func convertIntoLibrary(
+        _ candidates: [Book],
+        store: CalibreLibraryStore,
+        flag: CancellationFlag
+    ) async -> (converted: Int, failures: [String]) {
+        let root = libraryRoot
         var converted = 0
         var failures: [String] = []
         for (index, book) in candidates.enumerated() {
@@ -816,13 +864,7 @@ final class AppModel {
                 failures.append("\(book.title): \(error.localizedDescription)")
             }
         }
-
-        loadLibrary()
-        var summary = flag.isCancelled ? "Conversion cancelled — " : ""
-        summary += "Converted to AZW3: \(converted)"
-        if !failures.isEmpty { summary += ", failed: \(failures.count) (\(failures[0]))" }
-        lastSyncSummary = summary
-        await refreshPlan()
+        return (converted, failures)
     }
 
     func revealInFinder(_ books: [Book]) {
