@@ -325,10 +325,12 @@ final class AppModel {
     /// task lives. Both watchers report what is already there first, so this is also what
     /// connects on launch — there is no separate startup path.
     func watchDevice() async {
-        await withDiscardingTaskGroup { group in
-            group.addTask { @MainActor in await self.watchUSB() }
-            group.addTask { @MainActor in await self.watchVolumes() }
-        }
+        // An unstructured task rather than a task group: both loops are main-actor work, and
+        // the region checker cannot follow `self` into group children. It is cancelled with
+        // the USB loop, which ends when the view's `.task` is cancelled.
+        let volumes = Task { [weak self] in await self?.watchVolumes() }
+        defer { volumes.cancel() }
+        await watchUSB()
     }
 
     private func watchUSB() async {
