@@ -113,21 +113,28 @@ public final class SyncEngine {
         try device.documentsChildren()
     }
 
-    /// The manifest, plus books found on the device by the ASIN inside the file.
+    /// The manifest, plus books found on the device by what the file says about itself.
     ///
     /// calibre writes the book's uuid into EXTH 113, and so does Bookshelf, so a file the
     /// manifest does not know — sent by calibre without a `metadata.calibre` entry, or after the
     /// manifest was lost — can still be matched to its library book instead of being sent again
-    /// and showing up twice on the Kindle. Only where partial reads are cheap (USB drive), and
-    /// only for files no manifest entry claims, so a settled device reads nothing.
+    /// and showing up twice on the Kindle. Two passes over the files no entry claims:
     ///
-    /// Matched entries carry no source size or date: the file stays as it is until the book is
-    /// edited or its file changes, which is what calibre-adopted entries do too.
+    /// 1. **ASIN = book uuid.** Exact; the normal case.
+    /// 2. **Title (and author).** For a book re-added to the library since it was sent: it has
+    ///    a new uuid, the file still carries the old one. Title and an author must both match,
+    ///    compared folded (case, accents, punctuation); a title shared by two library books with
+    ///    the same author is ambiguous and left alone rather than guessed.
+    ///
+    /// Only where partial reads are cheap (USB drive), and only unclaimed files, so a settled
+    /// device reads nothing. Matched entries carry no source size or date: the file stays as it
+    /// is until the book is edited or its file changes, as calibre-adopted entries do.
     public func reconciledManifest(books: [Book]) throws -> DeviceManifest {
         var manifest = try loadManifest()
         guard device.readsPartially else { return manifest }
 
-        let wanted = Set(books.map(\.uuid)).subtracting(manifest.entries.keys)
+        var wanted = Dictionary(books.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        for uuid in manifest.entries.keys { wanted[uuid] = nil }
         guard !wanted.isEmpty else { return manifest }
 
         let claimed = Set(manifest.entries.values.map { $0.filename.lowercased() })
@@ -135,22 +142,59 @@ public final class SyncEngine {
             !$0.isFolder && !claimed.contains($0.filename.lowercased())
                 && Self.thumbnailExtensions.contains(($0.filename as NSString).pathExtension.lowercased())
         }
+        var summaries: [(DeviceFile, MOBIReader.RecordZeroSummary)] = []
         for file in candidates {
             guard let prefix = try? device.readDocumentPrefix(named: file.filename, length: Self.identityPrefixLength),
-                  let identity = MOBIReader.kindleIdentity(of: Data(prefix)),
-                  wanted.contains(identity.asin), manifest.entries[identity.asin] == nil
+                  let summary = MOBIReader.recordZeroSummary(of: Data(prefix))
             else { continue }
-            manifest.entries[identity.asin] = DeviceManifest.Entry(
+            summaries.append((file, summary))
+        }
+
+        func record(_ book: Book, _ file: DeviceFile) {
+            manifest.entries[book.uuid] = DeviceManifest.Entry(
                 filename: file.filename,
                 deviceSize: Int64(file.size),
                 format: (file.filename as NSString).pathExtension.uppercased(),
                 sentAt: .distantPast
             )
+            wanted[book.uuid] = nil
             // Not "adopted from calibre", but the same effect: this manifest differs from the
             // one on the device, so the next sync saves it even if there is nothing to send.
             manifest.adoptedFromCalibre = true
         }
+
+        var unmatched: [(DeviceFile, MOBIReader.RecordZeroSummary)] = []
+        for (file, summary) in summaries {
+            if let asin = summary.asin, let book = wanted[asin] {
+                record(book, file)
+            } else {
+                unmatched.append((file, summary))
+            }
+        }
+
+        for (file, summary) in unmatched {
+            guard let title = summary.title.map(Self.matchKey), !title.isEmpty else { continue }
+            let authors = Set(summary.authors.map(Self.matchKey)).subtracting(["", "unknown"])
+            let chosen = wanted.values.filter { book in
+                guard Self.matchKey(book.title) == title else { return false }
+                let bookAuthors = Set(book.authors.map(Self.matchKey)).subtracting(["", "unknown"])
+                // Both sides without an author: the title alone has to do. Otherwise they must share one.
+                if authors.isEmpty && bookAuthors.isEmpty { return true }
+                return !authors.isDisjoint(with: bookAuthors)
+            }
+            guard chosen.count == 1, let book = chosen.first else { continue }
+            record(book, file)
+        }
         return manifest
+    }
+
+    /// Lowercased, accents folded, everything but letters and digits dropped: "The Perfectionist's
+    /// Guide…" and "the perfectionists guide" compare equal, "Jeseň" and "Jesen" too.
+    static func matchKey(_ text: String) -> String {
+        let folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+        return String(String.UnicodeScalarView(folded.unicodeScalars.filter {
+            CharacterSet.alphanumerics.contains($0)
+        }))
     }
 
     // MARK: - Planning

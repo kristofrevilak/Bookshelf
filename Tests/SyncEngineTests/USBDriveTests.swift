@@ -42,9 +42,9 @@ private func makeJPEG(width: Int = 200, height: Int = 300) throws -> Data {
 }
 
 /// A small AZW3 written by Bookshelf's own KF8 writer, with an ASIN like the sync's conversion gives it.
-private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
-    var metadata = EbookMetadata(title: "Thumbnail Test")
-    metadata.authors = ["Bookshelf"]
+private func makeAZW3(asin: String?, cover: Data? = nil, title: String = "Thumbnail Test", authors: [String] = ["Bookshelf"]) -> Data {
+    var metadata = EbookMetadata(title: title)
+    metadata.authors = authors
     metadata.asin = asin
     var document = BookDocument(metadata: metadata)
     document.sections.append(BookDocument.Section(
@@ -326,4 +326,43 @@ private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
     try engine.device.deleteDocument(named: "Camus, Albert/Fall, The - Albert Camus.azw3")
     let left = try FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false))
     #expect(Set(left) == ["Stranger, The - Albert Camus.azw3", "Stranger, The - Albert Camus.sdr"])
+}
+
+/// A book re-added to the library has a new uuid while the copy on the Kindle still carries the
+/// old one as its ASIN. Title and author find it; a same-titled book by someone else does not.
+@Test func matchesReAddedBooksByTitleAndAuthor() throws {
+    let temp = FileManager.default.temporaryDirectory.appending(path: "bookshelf-readded-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: temp) }
+    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+    let root = try makeKindleVolume()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let documents = root.appending(path: "documents")
+
+    let store = try CalibreLibraryStore.create(at: temp.appending(path: "Library"))
+    let epub = temp.appending(path: "x.epub")
+    try Data("not really an epub".utf8).write(to: epub)
+    let guide = try store.add(fileAt: epub, metadata: NewBook(
+        title: "The Perfectionist's Guide to Losing Control: A Path to Peace and Power",
+        authors: ["Katherine Morgan Schafler"]
+    ))
+    let stories = try store.add(fileAt: epub, metadata: NewBook(title: "Collected Stories", authors: ["Wiliam Faulkner"]))
+
+    let folder = documents.appending(path: "Schafler, Morgan Katherine")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try makeAZW3(
+        asin: "6fe6d290-136e-4534-ae9b-8e1ed1e40cba",
+        title: "The Perfectionist’s Guide to Losing Control: A Path to Peace and Power",
+        authors: ["Katherine Morgan Schafler"]
+    ).write(to: folder.appending(path: "The perfectionist's guide to losing control.mobi"))
+    // Same title, different author, old uuid: must stay unmatched.
+    try makeAZW3(asin: "11111111-0000-0000-0000-000000000000", title: "Collected Stories", authors: ["Someone Else"])
+        .write(to: documents.appending(path: "Collected Stories - Someone Else.azw3"))
+
+    let engine = SyncEngine(library: store, device: try VolumeKindleStorage(root: root))
+    let manifest = try engine.reconciledManifest(books: try store.books())
+    #expect(manifest.entries[guide.uuid]?.filename == "Schafler, Morgan Katherine/The perfectionist's guide to losing control.mobi")
+    #expect(manifest.entries[stories.uuid] == nil)
+
+    #expect(SyncEngine.matchKey("Jeseň") == SyncEngine.matchKey("jesen"))
+    #expect(SyncEngine.matchKey("The Perfectionist’s Guide") == SyncEngine.matchKey("the perfectionists guide"))
 }

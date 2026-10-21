@@ -158,6 +158,23 @@ public enum MOBIReader {
     }
 
     public static func kindleIdentity(of data: Data) -> KindleIdentity? {
+        guard let header = recordZeroSummary(of: data),
+              let asin = header.asin, let cdetype = header.cdetype
+        else { return nil }
+        return KindleIdentity(asin: asin, cdetype: cdetype)
+    }
+
+    /// What record 0 says about a book on the device: ids, and the title and authors used to
+    /// match it to the library when its ASIN does not (the book was re-added to the library
+    /// since, and got a new uuid). Reads record 0 only, so a prefix of the file is enough.
+    public struct RecordZeroSummary: Sendable, Equatable {
+        public var asin: String?
+        public var cdetype: String?
+        public var title: String?
+        public var authors: [String] = []
+    }
+
+    public static func recordZeroSummary(of data: Data) -> RecordZeroSummary? {
         guard let records = try? recordOffsets(data), let record0Start = records.first,
               record0Start + 20 < data.count,
               data.subdata(in: record0Start + 16..<record0Start + 20) == Data("MOBI".utf8)
@@ -173,16 +190,22 @@ public enum MOBIReader {
               data.subdata(in: exthStart..<exthStart + 4) == Data("EXTH".utf8)
         else { return nil }
 
+        let codepage = mobiHeaderStart + MOBIHeader.codepage + 4 <= data.count
+            ? data.loadBE32(mobiHeaderStart + MOBIHeader.codepage) : 65001
+        let encoding: String.Encoding = codepage == 65001 ? .utf8 : .windowsCP1252
+
         var asin113: String?
         var asin504: String?
         var cdetype: String?
+        var title: String?
+        var authors: [String] = []
         var cursor = exthStart + 12
         for _ in 0..<Int(data.loadBE32(exthStart + 8)) {
             guard cursor + 8 <= data.count else { break }
             let type = data.loadBE32(cursor)
             let length = Int(data.loadBE32(cursor + 4))
             guard length >= 8, cursor + length <= data.count else { break }
-            let value = String(data: data.subdata(in: cursor + 8..<cursor + length), encoding: .utf8)?
+            let value = String(data: data.subdata(in: cursor + 8..<cursor + length), encoding: encoding)?
                 .trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
             cursor += length
 
@@ -191,12 +214,25 @@ public enum MOBIReader {
             case 113: asin113 = value
             case 504: asin504 = value
             case 501: cdetype = value
+            case 503: title = value
+            case 100: authors.append(value)
             default: break
             }
         }
 
-        guard let asin = asin113 ?? asin504, let cdetype else { return nil }
-        return KindleIdentity(asin: asin, cdetype: cdetype)
+        // No updated title (503): the full name stored in record 0 itself.
+        if title == nil {
+            let offset = mobiHeaderStart + MOBIHeader.fullNameOffset
+            if offset + 8 <= data.count {
+                let start = record0Start + Int(data.loadBE32(offset))
+                let length = Int(data.loadBE32(offset + 4))
+                if length > 0, length < 4096, start + length <= data.count {
+                    title = String(data: data.subdata(in: start..<start + length), encoding: encoding)
+                }
+            }
+        }
+
+        return RecordZeroSummary(asin: asin113 ?? asin504, cdetype: cdetype, title: title, authors: authors)
     }
 
     /// PalmDB: 78-byte header, then one 8-byte entry per record holding its file offset.
