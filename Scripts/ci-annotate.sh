@@ -25,6 +25,10 @@ if [[ $status -ne 0 ]]; then
             index=$((index + 1))
         done
     }
+    # Swift Testing failures: "Test x() recorded an issue at File.swift:12:3: Expectation failed: …".
+    # Collapsed to one line each (the expression detail can span several) and capped at 10.
+    grep -E 'recorded an issue|Expectation failed|Caught error' "$log" | sort -u | head -10 \
+        | cut -c1-900 | sed 's/^/::error::[test] /'
     # Linker and package errors carry no file position.
     grep -E '^error: ' "$log" | sort -u | head -5 | sed 's/^error: /::error::[error] /'
 fi
