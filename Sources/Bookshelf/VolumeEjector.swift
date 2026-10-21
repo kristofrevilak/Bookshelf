@@ -44,7 +44,12 @@ enum VolumeEjector {
     /// Names of the processes with files open on the volume, ours excluded, friendliest names
     /// first. Empty when `lsof` finds nothing or does not answer within a few seconds.
     static func processesUsing(_ volume: URL) async -> [String] {
-        await Task.detached(priority: .userInitiated) { () -> [String] in
+        await Task.detached(priority: .userInitiated) { lsofHolders(of: volume) }.value
+    }
+
+    /// Synchronous on purpose — it blocks on the child process — so it only ever runs on a
+    /// detached task, never on the main actor.
+    private static func lsofHolders(of volume: URL) -> [String] {
             let process = Process()
             process.executableURL = URL(filePath: "/usr/sbin/lsof")
             // -F pc: machine-readable pid and command lines. Given a mount point, lsof lists
@@ -85,7 +90,6 @@ enum VolumeEjector {
                 }
             }
             return names
-        }.value
     }
 
     /// lsof reports truncated command names; these are the ones people meet with a Kindle.
