@@ -16,8 +16,10 @@ public enum KindleConnection: String, Sendable {
     }
 }
 
-/// One file or folder directly inside `documents/`.
+/// One file or folder under `documents/`.
 public struct DeviceFile: Sendable, Hashable {
+    /// Relative to `documents/`. A plain name on MTP; on a USB-drive Kindle it can include
+    /// subfolders — calibre's Kindle driver files books as `Author Sort/Title - Author.azw3`.
     public let filename: String
     public let size: UInt64
     public let isFolder: Bool
@@ -45,6 +47,12 @@ public protocol KindleStorage: AnyObject {
     var displayName: String { get }
     /// Firmware version, when the device reveals it.
     var firmware: String? { get }
+    /// Whether `documents/` is listed and written below its top level. True for a USB-drive
+    /// Kindle; MTP stays flat, as Octavo always had it.
+    var supportsSubfolders: Bool { get }
+    /// Whether `readDocumentPrefix` is cheap. Matching books by the ASIN inside the file reads
+    /// one prefix per unmatched file, which is fine from a disk and too slow over MTP.
+    var readsPartially: Bool { get }
 
     func space() throws -> (capacity: UInt64, free: UInt64)
     func documentsChildren() throws -> [DeviceFile]
@@ -79,6 +87,20 @@ public enum KindleStorageGuard {
         }
     }
 
+    /// A path below `documents/`: at most three components, each a valid name, none hidden and
+    /// none an `.sdr` sidecar. calibre's layout needs two (`Author/Title.azw3`).
+    public static func checkDocumentPath(_ path: String) throws {
+        let components = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard (1...3).contains(components.count) else { throw SyncError.unsafeTarget(path) }
+        for (index, component) in components.enumerated() {
+            try checkDocumentName(component)
+            let isFolder = index < components.count - 1
+            if isFolder, component.hasPrefix(".") || component.lowercased().hasSuffix(".sdr") {
+                throw SyncError.unsafeTarget(path)
+            }
+        }
+    }
+
     /// `thumbnail_<asin>_<cdetype>_portrait.jpg`, and nothing else.
     public static func isThumbnailName(_ name: String) -> Bool {
         name.wholeMatch(of: /thumbnail_[A-Za-z0-9._\-]{1,64}_[A-Z]{4}_portrait\.jpg/) != nil
@@ -106,6 +128,8 @@ public final class MTPKindleStorage: KindleStorage {
     public var connection: KindleConnection { .mtp }
     public var firmware: String? { nil }
     public var supportsThumbnails: Bool { false }
+    public var supportsSubfolders: Bool { false }
+    public var readsPartially: Bool { false }
 
     public init(session: MTPSession, name: String = "Kindle") throws {
         self.session = session
@@ -198,6 +222,14 @@ public final class VolumeKindleStorage: KindleStorage {
     public let firmware: String?
 
     public var connection: KindleConnection { .usbDrive }
+    public var supportsSubfolders: Bool { true }
+    public var readsPartially: Bool { true }
+
+    /// Folders inside `documents/` that hold the Kindle's own content, never a sideloaded book:
+    /// Amazon purchases and their downloads, dictionaries. Never listed, never written.
+    static let reservedFolders: Set<String> = ["downloads", "dictionaries"]
+    /// calibre goes one level deep (`Author/Title.azw3`); two leaves room for a series folder.
+    static let maxDepth = 2
 
     static let partialSuffix = ".bookshelf-part"
 
@@ -227,27 +259,57 @@ public final class VolumeKindleStorage: KindleStorage {
         return (UInt64(max(values.volumeTotalCapacity ?? 0, 0)), UInt64(max(values.volumeAvailableCapacity ?? 0, 0)))
     }
 
+    /// Every file in `documents/` and its book subfolders, as paths relative to `documents/`.
+    /// Top-level folders are listed too (as folders); folders below are walked, not listed.
+    /// Never descends into `.sdr` sidecars, hidden folders or the Kindle's own folders.
     public func documentsChildren() throws -> [DeviceFile] {
+        var files: [DeviceFile] = []
+        try walk(documents, prefix: "", depth: 0, into: &files)
+        return files
+    }
+
+    private func walk(_ directory: URL, prefix: String, depth: Int, into files: inout [DeviceFile]) throws {
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
         let urls = try FileManager.default.contentsOfDirectory(
-            at: documents, includingPropertiesForKeys: keys, options: []
+            at: directory, includingPropertiesForKeys: keys, options: []
         )
-        return urls.compactMap { url in
+        for url in urls {
             let name = url.lastPathComponent
-            guard !Self.isNoise(name) else { return nil }
+            guard !Self.isNoise(name) else { continue }
             let values = try? url.resourceValues(forKeys: Set(keys))
-            return DeviceFile(
-                filename: name,
-                size: UInt64(max(values?.fileSize ?? 0, 0)),
-                isFolder: values?.isDirectory ?? false,
-                modified: values?.contentModificationDate
-            )
+            let path = prefix + name
+            let isFolder = values?.isDirectory ?? false
+
+            if isFolder {
+                if depth == 0 {
+                    files.append(DeviceFile(filename: path, size: 0, isFolder: true, modified: values?.contentModificationDate))
+                }
+                let descend = depth < Self.maxDepth
+                    && !name.hasPrefix(".")
+                    && !name.lowercased().hasSuffix(".sdr")
+                    && !(depth == 0 && Self.reservedFolders.contains(name.lowercased()))
+                if descend {
+                    // An unreadable folder is skipped, not fatal: it cannot hold one of our books.
+                    try? walk(url, prefix: path + "/", depth: depth + 1, into: &files)
+                }
+            } else {
+                files.append(DeviceFile(
+                    filename: path,
+                    size: UInt64(max(values?.fileSize ?? 0, 0)),
+                    isFolder: false,
+                    modified: values?.contentModificationDate
+                ))
+            }
         }
     }
 
-    private func documentURL(_ name: String) throws -> URL {
-        try KindleStorageGuard.checkDocumentName(name)
-        return documents.appending(path: name, directoryHint: .notDirectory)
+    private func documentURL(_ path: String) throws -> URL {
+        try KindleStorageGuard.checkDocumentPath(path)
+        if let first = path.split(separator: "/").first, path.contains("/"),
+           Self.reservedFolders.contains(first.lowercased()) {
+            throw SyncError.unsafeTarget(path)
+        }
+        return documents.appending(path: path, directoryHint: .notDirectory)
     }
 
     private func regularFile(_ url: URL) -> Bool {
@@ -276,14 +338,22 @@ public final class VolumeKindleStorage: KindleStorage {
     }
 
     public func writeDocument(_ bytes: [UInt8], named name: String, modified: Date) throws {
-        try write(bytes, to: try documentURL(name), modified: modified)
+        let url = try documentURL(name)
+        // A book re-sent into calibre's author folder may find the folder gone.
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try write(bytes, to: url, modified: modified)
     }
 
+    /// Removes the file and its AppleDouble companion. Never a folder — `.sdr` sidecars stay
+    /// put — and an author folder is left behind even when empty, since its `.sdr`s live there.
     public func deleteDocument(named name: String) throws {
         let url = try documentURL(name)
-        guard regularFile(url) else { return }  // never a folder: .sdr sidecars stay put
+        guard regularFile(url) else { return }
         try FileManager.default.removeItem(at: url)
-        try? FileManager.default.removeItem(at: documents.appending(path: "._\(name)"))
+        let companion = url.deletingLastPathComponent().appending(path: "._\(url.lastPathComponent)")
+        try? FileManager.default.removeItem(at: companion)
     }
 
     public var supportsThumbnails: Bool { Self.isDirectory(thumbnails) }

@@ -116,7 +116,7 @@ actor DeviceController {
     func plan(books: [Book], target: ConversionTarget) throws -> SyncPlan {
         let engine = try requireEngine()
         engine.conversionTarget = target
-        return try engine.plan(books: books, manifest: engine.loadManifest())
+        return try engine.plan(books: books, manifest: engine.reconciledManifest(books: books))
     }
 
     /// Sends the planned books. Progress is reported through an isolated callback so the
@@ -137,7 +137,7 @@ actor DeviceController {
         let engine = try requireEngine()
         engine.conversionTarget = target
         engine.writesThumbnails = fixThumbnails
-        let manifest = try engine.loadManifest()
+        let manifest = try engine.reconciledManifest(books: books)
         let scope = only.map { ids in books.filter { ids.contains($0.id) } } ?? books
         let plan = try engine.plan(books: scope, manifest: manifest)
         if !plan.isEmpty || manifest.adoptedFromCalibre {
@@ -170,11 +170,12 @@ actor DeviceController {
     /// next plan sees them as absent rather than stale. `deleteDocument` only ever matches
     /// non-folder entries, which is what keeps `.sdr` reading-progress sidecars safe.
     @discardableResult
-    func remove(bookUUIDs: [String]) throws -> Int {
+    func remove(books: [Book]) throws -> Int {
         let engine = try requireEngine()
-        var manifest = try engine.loadManifest()
+        // Reconciled, so a book found only by its ASIN can be removed too.
+        var manifest = try engine.reconciledManifest(books: books)
         var removed = 0
-        for uuid in bookUUIDs {
+        for uuid in books.map(\.uuid) {
             guard let entry = manifest.entries[uuid] else { continue }
             try delete(filename: entry.filename)
             manifest.entries[uuid] = nil

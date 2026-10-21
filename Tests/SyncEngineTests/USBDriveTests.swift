@@ -242,3 +242,88 @@ private func makeAZW3(asin: String?, cover: Data? = nil) -> Data {
         atPath: root.appending(path: "system/thumbnails/thumbnail_asin-old-0002_EBOK_portrait.jpg").path(percentEncoded: false)
     ))
 }
+
+// MARK: - calibre's layout
+
+@Test func acceptsCalibresAuthorFoldersButNothingOutsideThem() {
+    #expect(throws: Never.self) { try KindleStorageGuard.checkDocumentPath("Camus, Albert/Stranger, The - Albert Camus.azw3") }
+    #expect(throws: Never.self) { try KindleStorageGuard.checkDocumentPath("Flat - Book.azw3") }
+    for path in ["../x.azw3", "a/../b.azw3", "/abs.azw3", "a//b.azw3", "Book.sdr/x.azw3",
+                 ".hidden/x.azw3", "a/b/c/d.azw3", "Author/update.bin"] {
+        #expect(throws: SyncError.self, "\(path)") { try KindleStorageGuard.checkDocumentPath(path) }
+    }
+}
+
+/// The Kindle 10th generation as calibre leaves it: books in author folders, most of them listed
+/// in `metadata.calibre`, one only identifiable by the ASIN inside it, and Amazon's own content in
+/// `Downloads/`. Every library book already there must be recognised — none sent twice — and the
+/// one that is genuinely new must be the only send.
+@Test func recognisesBooksCalibrePutInAuthorFolders() throws {
+    let temp = FileManager.default.temporaryDirectory.appending(path: "bookshelf-calibre-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: temp) }
+    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+    let root = try makeKindleVolume()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let documents = root.appending(path: "documents")
+
+    let store = try CalibreLibraryStore.create(at: temp.appending(path: "Library"))
+    func addBook(_ title: String) throws -> Book {
+        let file = temp.appending(path: "\(title).azw3")
+        try makeAZW3(asin: nil).write(to: file)
+        return try store.add(fileAt: file, metadata: NewBook(title: title, authors: ["Albert Camus"]))
+    }
+    let listed = try addBook("The Stranger")
+    let unlisted = try addBook("The Fall")
+    let new = try addBook("The Plague")
+
+    // On the device, the way calibre writes them: author-sort folder, uuid as ASIN.
+    let folder = documents.appending(path: "Camus, Albert")
+    try FileManager.default.createDirectory(at: folder.appending(path: "Stranger, The - Albert Camus.sdr"), withIntermediateDirectories: true)
+    let stranger = makeAZW3(asin: listed.uuid)
+    try stranger.write(to: folder.appending(path: "Stranger, The - Albert Camus.azw3"))
+    try makeAZW3(asin: unlisted.uuid).write(to: folder.appending(path: "Fall, The - Albert Camus.azw3"))
+    try Data().write(to: folder.appending(path: "._Fall, The - Albert Camus.azw3"))
+    // Amazon's own downloads: never listed, never matched, never written.
+    try FileManager.default.createDirectory(at: documents.appending(path: "Downloads/Items01"), withIntermediateDirectories: true)
+    try makeAZW3(asin: new.uuid).write(to: documents.appending(path: "Downloads/Items01/store.azw3"))
+
+    // calibre records the library's last_modified at send time; unchanged since, so not stale.
+    let sentStamp = ISO8601DateFormatter().string(from: listed.lastModified.addingTimeInterval(1))
+    let calibreManifest = """
+    [{"uuid": "\(listed.uuid)", "lpath": "documents/Camus, Albert/Stranger, The - Albert Camus.azw3",
+      "size": \(stranger.count), "last_modified": "\(sentStamp)"},
+     {"uuid": null, "lpath": "documents/My Clippings.txt", "size": 10}]
+    """
+    try calibreManifest.write(to: root.appending(path: "metadata.calibre"), atomically: true, encoding: .utf8)
+
+    let engine = SyncEngine(library: store, device: try VolumeKindleStorage(root: root))
+    engine.writesThumbnails = false
+    let books = try store.books()
+
+    let files = try engine.documentsChildren().filter { !$0.isFolder }.map(\.filename)
+    #expect(Set(files) == ["Camus, Albert/Stranger, The - Albert Camus.azw3", "Camus, Albert/Fall, The - Albert Camus.azw3"])
+
+    let manifest = try engine.reconciledManifest(books: books)
+    #expect(manifest.entries[listed.uuid]?.filename == "Camus, Albert/Stranger, The - Albert Camus.azw3")
+    #expect(manifest.entries[unlisted.uuid]?.filename == "Camus, Albert/Fall, The - Albert Camus.azw3")
+    #expect(manifest.entries[new.uuid] == nil)
+
+    let plan = try engine.plan(books: books, manifest: manifest)
+    #expect(Set(plan.upToDate.map(\.uuid)) == [listed.uuid, unlisted.uuid])
+    #expect(plan.send.map(\.book.uuid) == [new.uuid])
+    #expect(plan.orphans.isEmpty)
+
+    // The sync writes the new book flat and records all three; the next plan is empty.
+    _ = try engine.execute(plan, manifest: manifest)
+    let saved = try engine.loadManifest()
+    #expect(saved.entries.count == 3)
+    #expect(!(saved.entries[new.uuid]?.filename.contains("/") ?? true))
+    #expect(try engine.plan(books: books, manifest: engine.reconciledManifest(books: books)).isEmpty)
+    // Amazon's folder was left exactly as it was.
+    #expect(try FileManager.default.contentsOfDirectory(atPath: documents.appending(path: "Downloads/Items01").path(percentEncoded: false)) == ["store.azw3"])
+
+    // Removing a nested book takes its ._ companion and leaves the author folder and .sdr.
+    try engine.device.deleteDocument(named: "Camus, Albert/Fall, The - Albert Camus.azw3")
+    let left = try FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false))
+    #expect(Set(left) == ["Stranger, The - Albert Camus.azw3", "Stranger, The - Albert Camus.sdr"])
+}

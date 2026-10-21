@@ -84,8 +84,11 @@ public struct DeviceManifest: Codable, Sendable {
                   let lpath = record.lpath,
                   lpath.hasPrefix("documents/")
             else { continue }
+            // calibre's Kindle driver files books in author folders ("Author Sort/Title.azw3").
+            // Kept as a relative path; storages that are flat (MTP) never match those, and the
+            // planner then treats the book as not on the device.
             let filename = String(lpath.dropFirst("documents/".count))
-            guard !filename.contains("/") else { continue }  // book files live flat in documents/
+            guard !filename.isEmpty, filename.split(separator: "/").count <= 3 else { continue }
             entries[uuid] = Entry(
                 filename: filename,
                 deviceSize: record.size ?? 0,

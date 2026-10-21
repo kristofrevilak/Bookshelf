@@ -133,6 +133,20 @@ files and `.DS_Store` are hidden from listings (they would otherwise show as orp
 `VolumeWatcher` (NSWorkspace mount notifications, initial scan included, like `USBWatcher`), and
 `AppModel.mountedKindle` stops the MTP deadline from reporting "not ready" for a Kindle that never
 offers MTP. A drive-mode Kindle only indexes new books once ejected, hence `AppModel.eject()`.
+**Subfolders.** calibre's Kindle driver files books as `documents/Author Sort/Title - Author.azw3`,
+so on a USB drive `DeviceFile.filename` is a path relative to `documents/` and the listing walks two
+levels down — skipping `.sdr` sidecars, hidden folders and the Kindle's own `Downloads/` and
+`dictionaries/`, which are never written either (`checkDocumentPath`). calibre's `metadata.calibre`
+entries keep their nested `lpath`. MTP stays flat (`supportsSubfolders` false): a nested manifest
+name never matches there, and the planner sends under our own flat name instead. New books are
+always written flat; a re-send of a calibre book goes back to its author folder.
+
+**Matching by ASIN.** `SyncEngine.reconciledManifest(books:)` is what every plan, sync and removal
+starts from: the manifest, plus books found by the ASIN (EXTH 113 = book uuid, written by calibre and
+by us) in files no entry claims. It only reads when partial reads are cheap (`readsPartially`, USB
+drive) and only unclaimed files, so a settled device reads nothing. Without it, books calibre sent
+but never recorded would be sent a second time and show up twice.
+
 The USB-drive path is covered end to end by `USBDriveTests`, against a temp folder laid out like
 the Kindle's volume — no device needed.
 

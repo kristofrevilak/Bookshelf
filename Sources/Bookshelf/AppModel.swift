@@ -655,7 +655,7 @@ final class AppModel {
         guard isConnected, !books.isEmpty else { return }
         let epoch = deviceEpoch
         do {
-            let removed = try await device.remove(bookUUIDs: books.map(\.uuid))
+            let removed = try await device.remove(books: books)
             guard epoch == deviceEpoch else { return }
             lastSyncSummary = removed > 0
                 ? "Removed from device: \(removed)"

@@ -113,6 +113,46 @@ public final class SyncEngine {
         try device.documentsChildren()
     }
 
+    /// The manifest, plus books found on the device by the ASIN inside the file.
+    ///
+    /// calibre writes the book's uuid into EXTH 113, and so does Bookshelf, so a file the
+    /// manifest does not know — sent by calibre without a `metadata.calibre` entry, or after the
+    /// manifest was lost — can still be matched to its library book instead of being sent again
+    /// and showing up twice on the Kindle. Only where partial reads are cheap (USB drive), and
+    /// only for files no manifest entry claims, so a settled device reads nothing.
+    ///
+    /// Matched entries carry no source size or date: the file stays as it is until the book is
+    /// edited or its file changes, which is what calibre-adopted entries do too.
+    public func reconciledManifest(books: [Book]) throws -> DeviceManifest {
+        var manifest = try loadManifest()
+        guard device.readsPartially else { return manifest }
+
+        let wanted = Set(books.map(\.uuid)).subtracting(manifest.entries.keys)
+        guard !wanted.isEmpty else { return manifest }
+
+        let claimed = Set(manifest.entries.values.map { $0.filename.lowercased() })
+        let candidates = try documentsChildren().filter {
+            !$0.isFolder && !claimed.contains($0.filename.lowercased())
+                && Self.thumbnailExtensions.contains(($0.filename as NSString).pathExtension.lowercased())
+        }
+        for file in candidates {
+            guard let prefix = try? device.readDocumentPrefix(named: file.filename, length: Self.identityPrefixLength),
+                  let identity = MOBIReader.kindleIdentity(of: Data(prefix)),
+                  wanted.contains(identity.asin), manifest.entries[identity.asin] == nil
+            else { continue }
+            manifest.entries[identity.asin] = DeviceManifest.Entry(
+                filename: file.filename,
+                deviceSize: Int64(file.size),
+                format: (file.filename as NSString).pathExtension.uppercased(),
+                sentAt: .distantPast
+            )
+            // Not "adopted from calibre", but the same effect: this manifest differs from the
+            // one on the device, so the next sync saves it even if there is nothing to send.
+            manifest.adoptedFromCalibre = true
+        }
+        return manifest
+    }
+
     // MARK: - Planning
 
     public func plan(books: [Book], manifest: DeviceManifest) throws -> SyncPlan {
@@ -147,8 +187,13 @@ public final class SyncEngine {
             // holding reading progress and highlights is named after the stem. Renaming it
             // would strand the user's place in the book.
             let retarget = entry.map { Self.needsRetarget(entry: $0, target: target) } ?? false
-            let filename = entry.map { entry in
-                retarget ? Self.retargeted(entry.filename, to: target) : entry.filename
+            // A nested name (calibre's author folders) only means something on a storage that
+            // has subfolders; on a flat one the book is re-sent under our own flat name.
+            let usableEntryName = entry.map(\.filename).flatMap {
+                device.supportsSubfolders || !$0.contains("/") ? $0 : nil
+            }
+            let filename = usableEntryName.map { name in
+                retarget ? Self.retargeted(name, to: target) : name
             } ?? Self.targetFilename(for: book, format: format, convertedTo: target)
 
             guard let entry, let existing else {
@@ -264,7 +309,11 @@ public final class SyncEngine {
 
         for (index, item) in plan.send.enumerated() {
             if shouldStop?() == true { break }
-            try KindleStorageGuard.checkDocumentName(item.filename)
+            if device.supportsSubfolders {
+                try KindleStorageGuard.checkDocumentPath(item.filename)
+            } else {
+                try KindleStorageGuard.checkDocumentName(item.filename)
+            }
             onProgress?(Progress(item: item, index: index, total: plan.send.count))
 
             // EPUB, FB2 and CBZ become an AZW3 or a MOBI first; the result is cached on disk.

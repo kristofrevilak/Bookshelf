@@ -77,7 +77,7 @@ do {
     print("Device: \(engine.device.displayName) (\(engine.device.connection.displayName)\(firmware)) — \(humanSize(Int64(space.free))) free")
     print("Conversion target: \(conversionTarget.displayName)")
 
-    let manifest = try engine.loadManifest()
+    let manifest = try engine.reconciledManifest(books: books)
     print("Manifest: \(manifest.entries.count) entries\(manifest.adoptedFromCalibre ? " (adopted from calibre)" : "")")
 
     let plan = try engine.plan(books: books, manifest: manifest)
