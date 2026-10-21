@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lets a build be started from the Actions tab without a new commit.
+  workflow_dispatch:
 
 permissions:
   contents: read
