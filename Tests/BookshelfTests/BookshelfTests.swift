@@ -20,3 +20,14 @@ import Testing
     #expect(AppModel.Filter(storageKey: "author") == nil)
     #expect(AppModel.Filter(storageKey: "bogus:Name") == nil)
 }
+
+/// The names in "the Kindle is still in use by …" — lsof's truncated command names mapped to
+/// something a person recognises.
+@Test func ejectNamesWhoHoldsTheKindle() {
+    #expect(VolumeEjector.friendlyName("mds_stores").hasPrefix("Spotlight"))
+    #expect(VolumeEjector.friendlyName("mdworker_shared").hasPrefix("Spotlight"))
+    #expect(VolumeEjector.friendlyName("Claude Helper").hasPrefix("the Claude app"))
+    #expect(VolumeEjector.friendlyName("com.apple.Virtualization.VirtualMachine").hasPrefix("the Claude app"))
+    #expect(VolumeEjector.friendlyName("Finder").hasPrefix("Finder"))
+    #expect(VolumeEjector.friendlyName("Preview") == "Preview")
+}

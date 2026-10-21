@@ -103,7 +103,7 @@ struct DeviceStatusButton: View {
                     showingDetail = false
                     Task { await model.eject() }
                 }
-                .disabled(model.syncProgress != nil)
+                .disabled(model.syncProgress != nil || model.isEjecting)
             }
         }
         .padding()

@@ -73,6 +73,21 @@ struct ContentView: View {
         } message: {
             Text(model.libraryAlert ?? "")
         }
+        .alert(
+            "Could not eject the Kindle",
+            isPresented: Binding(
+                get: { model.ejectAlert != nil },
+                set: { if !$0 { model.ejectAlert = nil } }
+            )
+        ) {
+            Button("Try Again") {
+                model.ejectAlert = nil
+                Task { await model.eject() }
+            }
+            Button("OK", role: .cancel) { model.ejectAlert = nil }
+        } message: {
+            Text(model.ejectAlert ?? "")
+        }
         .confirmationDialog(
             removalPrompt,
             isPresented: Binding(

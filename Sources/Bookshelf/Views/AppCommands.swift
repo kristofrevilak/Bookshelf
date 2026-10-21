@@ -115,7 +115,7 @@ struct AppCommands: Commands {
 
             Button("Eject Kindle") { Task { await model.eject() } }
                 .keyboardShortcut("e")
-                .disabled(!model.isUSBDrive || model.syncProgress != nil)
+                .disabled(!model.isUSBDrive || model.syncProgress != nil || model.isEjecting)
 
             Divider()
 

@@ -108,6 +108,10 @@ final class AppModel {
     /// A library the user picked that turned out not to be one. Transient, because the library
     /// they already had is untouched — the pick simply did not happen.
     var libraryAlert: String?
+    /// Why the last Eject did not happen. An alert rather than `.failed`: the Kindle is still
+    /// connected and usable, it just could not be unmounted yet.
+    var ejectAlert: String?
+    private(set) var isEjecting = false
 
     /// The book being edited in `MetadataEditor`. Lives here rather than as view-local `@State`
     /// so both the table's context menu and Library ▸ Edit Metadata… drive the same sheet.
@@ -496,15 +500,21 @@ final class AppModel {
 
     /// Unmounts a USB-drive Kindle, which is what makes it leave USB mode and index the books
     /// it was just sent. The session goes first so nothing of ours holds the volume open.
+    ///
+    /// Bookshelf holds nothing open on the volume between operations, so the session is left
+    /// in place: on success the unmount notification detaches it, and on failure the Kindle
+    /// simply stays connected while the alert says who is holding it.
     func eject() async {
-        guard isUSBDrive, syncProgress == nil, let url = await device.volumeURL else { return }
-        await handleDetach()
+        guard isUSBDrive, syncProgress == nil, !isEjecting, let url = await device.volumeURL else { return }
+        isEjecting = true
+        defer { isEjecting = false }
+        lastSyncSummary = "Ejecting the Kindle…"
         do {
-            try NSWorkspace.shared.unmountAndEjectDevice(at: url)
+            try await VolumeEjector.eject(url)
             lastSyncSummary = "Kindle ejected — safe to unplug"
         } catch {
-            // Usually Finder or another app holding a file open on the Kindle.
-            deviceState = .failed("Could not eject the Kindle: \(error.localizedDescription)")
+            lastSyncSummary = nil
+            ejectAlert = error.localizedDescription
         }
     }
 
