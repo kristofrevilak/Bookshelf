@@ -33,12 +33,12 @@ jobs:
           swift --version
 
       - name: Build
-        run: swift build
+        run: ./Scripts/ci-annotate.sh swift build
 
       # The catalogue tests are gated on BOOKSHELF_NETWORK_TESTS, which is unset here, so this
       # run touches no network. Corpus and library tests bail out quietly without a library.
       - name: Test
-        run: swift test
+        run: ./Scripts/ci-annotate.sh swift test
 
       - name: Assemble Bookshelf.app
         run: ./Scripts/make-app.sh debug
