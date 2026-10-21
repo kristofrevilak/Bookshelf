@@ -74,13 +74,17 @@ signature relies on), re-verifies the unpacked copy, and publishes the zip plus 
 `SHA256SUMS.txt`. It is **not idempotent** — a failed run after the tag was pushed needs
 `gh release delete <tag> --yes` and the tag deleted on both sides before re-tagging. Both workflows
 pin `runs-on: macos-26`; an unpinned `macos-latest` would let the toolchain move between a green CI
-run and a release build. The shipped app is signed with a Developer ID (hardened runtime,
-secure timestamp), notarized and stapled: `make-app.sh` signs with `BOOKSHELF_SIGN_IDENTITY` when set
-and ad-hoc otherwise, so local builds need no certificate. The workflow needs five secrets —
-`DEVELOPER_ID_P12_BASE64`, `DEVELOPER_ID_P12_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`
-— and fails rather than shipping unsigned when one is missing. It trusts notarytool's JSON
-`status`, not its exit code, and runs `spctl --assess` on the unpacked zip. The CLI tarball is
-deliberately left un-notarized, so its binaries still need `com.apple.quarantine` cleared.
+run and a release build. Signing depends on the repo's secrets. With all five — `DEVELOPER_ID_P12_BASE64`,
+`DEVELOPER_ID_P12_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` — the app is signed with a
+Developer ID (hardened runtime, secure timestamp), notarized, stapled and checked with
+`spctl --assess`; it trusts notarytool's JSON `status`, not its exit code. Without them
+(`HAS_SIGNING` false — the case for this fork) the app is ad-hoc signed and not notarized, so the
+first launch needs right-click ▸ Open. `make-app.sh` signs with `BOOKSHELF_SIGN_IDENTITY` when set
+and ad-hoc otherwise, so local builds need no certificate. The CLI tarball is never notarized, so
+its binaries need `com.apple.quarantine` cleared.
+
+CI turns compiler errors into GitHub annotations (`Scripts/ci-annotate.sh`) and posts the app size
+as a notice, so both can be read from the run page or the API without the raw log.
 
 ## Architecture
 
