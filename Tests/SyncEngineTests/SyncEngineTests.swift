@@ -27,7 +27,10 @@ private func makeObject(size: UInt64, name: String) -> DeviceFile {
     """
     let manifest = DeviceManifest.adoptingCalibreManifest(Array(json.utf8))
     #expect(manifest.adoptedFromCalibre)
-    #expect(manifest.entries.count == 1)  // no uuid, or not a flat documents/ file
+    // No uuid, or outside documents/, is skipped. A book in a subfolder is kept: calibre's
+    // Kindle driver files books in author folders, and the USB-drive storage walks them.
+    #expect(manifest.entries.count == 2)
+    #expect(manifest.entries["u-2"]?.filename == "sub/deep.azw3")
     let entry = try #require(manifest.entries["u-1"])
     #expect(entry.filename == "riemieslo - sierghiei dovaltov.azw3")
     #expect(entry.deviceSize == 591233)
