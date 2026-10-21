@@ -1,7 +1,7 @@
 import SwiftUI
 import SyncEngine
 
-extension DeviceFile: @retroactive Identifiable {
+extension DeviceFile: Identifiable {
     public var id: String { filename }
 }
 
