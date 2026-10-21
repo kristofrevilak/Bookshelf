@@ -68,7 +68,9 @@ interface is busy in another process", and vice versa. `pkill -x Bookshelf` befo
 
 ### Releasing
 
-`.github/workflows/release.yml` fires on a `v*` tag: it stamps the tag into the bundle through
+`.github/workflows/release.yml` fires on a `v*` tag, or by hand from the Actions tab (Release ▸
+Run workflow, with a version — gh then creates the tag at that commit; tag pushes are blocked from
+Claude's cloud sessions, so this is the route there): it stamps the tag into the bundle through
 `BOOKSHELF_VERSION`, archives with `ditto -c -k --keepParent` (plain `zip` drops the xattrs an ad-hoc
 signature relies on), re-verifies the unpacked copy, and publishes the zip plus a CLI tarball and
 `SHA256SUMS.txt`. It is **not idempotent** — a failed run after the tag was pushed needs
