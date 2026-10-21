@@ -63,3 +63,6 @@ fi
 
 echo "$APP ($BOOKSHELF_VERSION build $BOOKSHELF_BUILD)"
 du -sh "$APP" | cut -f1 | xargs echo "Size:"
+# Surfaced on the run page too, so the size budget is visible without opening the log.
+[[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::notice title=App size::$(du -sh "$APP" | cut -f1) ($CONFIGURATION)"
+exit 0
