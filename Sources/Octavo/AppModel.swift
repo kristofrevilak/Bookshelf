@@ -149,6 +149,9 @@ final class AppModel {
     /// something the user can act on about the Kindle. Remember the Kindle is there instead, and
     /// connect once a library exists.
     private var deviceAttached = false
+    /// A Kindle mounted as a USB drive. Set from the mount notification, so the MTP deadline
+    /// knows not to report "not in MTP mode" for a Kindle that never offers MTP at all.
+    private var mountedKindle: URL?
     private var hasLibrary: Bool { store != nil }
 
     /// Bumped on every detach. Async work started before a detach compares against it and
@@ -318,22 +321,63 @@ final class AppModel {
 
     // MARK: - Device
 
-    /// Consumes IOKit hotplug notifications for as long as the caller's task lives. The
-    /// watcher's initial drain reports an already-connected Kindle, so this is also what
+    /// Consumes IOKit hotplug notifications and volume mounts for as long as the caller's
+    /// task lives. Both watchers report what is already there first, so this is also what
     /// connects on launch — there is no separate startup path.
     func watchDevice() async {
+        await withDiscardingTaskGroup { group in
+            group.addTask { @MainActor in await self.watchUSB() }
+            group.addTask { @MainActor in await self.watchVolumes() }
+        }
+    }
+
+    private func watchUSB() async {
         for await event in USBWatcher.events() {
             switch event {
             case .deviceAttached: deviceAppeared()
             case .mtpReady: mtpBecameReady()
-            case .detached: await handleDetach()
+            case .detached:
+                mountedKindle = nil
+                await handleDetach()
             }
         }
     }
 
+    private func watchVolumes() async {
+        for await event in VolumeWatcher.events() {
+            switch event {
+            case .mounted(let url): volumeMounted(url)
+            case .unmounted(let url): await volumeUnmounted(url)
+            }
+        }
+    }
+
+    /// A Kindle mounted as a drive is ready the moment it mounts — nothing to wait for.
+    private func volumeMounted(_ url: URL) {
+        guard KindleVolume.isKindle(url) else { return }
+        mountedKindle = url
+        deviceAttached = true
+        mtpDeadline?.cancel()
+        mtpDeadline = nil
+        guard hasLibrary, !isConnected else { return }
+        deviceState = .connecting
+        connectTask?.cancel()
+        connectTask = Task { [weak self] in await self?.attemptConnect() }
+    }
+
+    private func volumeUnmounted(_ url: URL) async {
+        guard let mounted = mountedKindle,
+              mounted.standardizedFileURL.path(percentEncoded: false) == url.standardizedFileURL.path(percentEncoded: false)
+        else { return }
+        mountedKindle = nil
+        await handleDetach()
+    }
+
     private func deviceAppeared() {
         deviceAttached = true
-        guard hasLibrary, !isConnected else { return }
+        // Mounted already: the drive path is connecting or connected, and the MTP deadline
+        // below would only end in a misleading "not in MTP mode".
+        guard hasLibrary, !isConnected, mountedKindle == nil else { return }
         deviceState = .connecting
         // A Kindle that is charge-only or locked publishes no MTP interface at all, so
         // .mtpReady may never arrive. Fall back rather than spin forever on "Connecting…".
@@ -386,6 +430,7 @@ final class AppModel {
                 guard epoch == deviceEpoch else { return }
                 deviceState = .connected(snapshot)
                 await refreshPlan()
+                await restoreThumbnails(epoch: epoch)
                 await autoSyncIfEnabled(epoch: epoch)
                 return
             } catch {
@@ -440,6 +485,23 @@ final class AppModel {
         return false
     }
 
+    /// Connected to a Kindle mounted as a disk — the case that has an Eject.
+    var isUSBDrive: Bool { deviceState.snapshot?.connection == .usbDrive }
+
+    /// Unmounts a USB-drive Kindle, which is what makes it leave USB mode and index the books
+    /// it was just sent. The session goes first so nothing of ours holds the volume open.
+    func eject() async {
+        guard isUSBDrive, syncProgress == nil, let url = await device.volumeURL else { return }
+        await handleDetach()
+        do {
+            try NSWorkspace.shared.unmountAndEjectDevice(at: url)
+            lastSyncSummary = "Kindle ejected — safe to unplug"
+        } catch {
+            // Usually Finder or another app holding a file open on the Kindle.
+            deviceState = .failed("Could not eject the Kindle: \(error.localizedDescription)")
+        }
+    }
+
     /// Refresh (a Kindle already connected) or connect (one that isn't) — one action for the
     /// toolbar button and the status popover's retry, which both mean "the user asked, so a
     /// failure here is a real error" rather than the watcher's quieter `.waitingForMTP`.
@@ -463,11 +525,23 @@ final class AppModel {
             guard epoch == deviceEpoch else { return }
             deviceState = .connected(snapshot)
             await refreshPlan()
+            await restoreThumbnails(epoch: epoch)
             await autoSyncIfEnabled(epoch: epoch)
         } catch {
             guard epoch == deviceEpoch else { return }
             deviceState = .failed(error.localizedDescription)
         }
+    }
+
+    /// Puts back the cover thumbnails the Kindle deleted since the last connect. Quiet unless
+    /// it actually did something; a failure here is not worth an error state.
+    private func restoreThumbnails(epoch: Int) async {
+        guard epoch == deviceEpoch, Preferences.shared.fixCoverThumbnails,
+              deviceState.snapshot?.connection == .usbDrive
+        else { return }
+        let restored = (try? await device.restoreThumbnails(books: books)) ?? 0
+        guard epoch == deviceEpoch, restored > 0 else { return }
+        lastSyncSummary = "Covers restored on the Kindle: \(restored)"
     }
 
     /// Fires a sync right after a connect, when the user has asked for that in Settings ▸ Sync
@@ -545,6 +619,7 @@ final class AppModel {
                 only: only,
                 target: Preferences.shared.conversionTarget,
                 pruneCache: Preferences.shared.pruneCacheAfterSync,
+                fixThumbnails: Preferences.shared.fixCoverThumbnails,
                 shouldStop: { flag.isCancelled }
             ) { [weak self] progress in
                 Task { @MainActor in
@@ -559,9 +634,11 @@ final class AppModel {
                 }
             }
             guard epoch == deviceEpoch else { return }
+            // A USB-drive Kindle only picks new books up once it is ejected.
+            let ejectHint = isUSBDrive && !done.send.isEmpty ? " — eject the Kindle to see them" : ""
             lastSyncSummary = flag.isCancelled
                 ? "Sync cancelled"
-                : (done.send.isEmpty ? "Everything was up to date" : "Books sent: \(done.send.count)")
+                : (done.send.isEmpty ? "Everything was up to date" : "Books sent: \(done.send.count)\(ejectHint)")
             deviceState = .connected(try await device.snapshot())
             await refreshPlan()
         } catch {
@@ -619,6 +696,77 @@ final class AppModel {
     /// menus act on, same as the table's own context menu.
     var selectedBooks: [Book] {
         books.filter { selection.contains($0.id) }
+    }
+
+    // MARK: - Conversion
+
+    /// The format Convert to AZW3 reads from — the same order the sync's own conversion uses.
+    static func conversionSource(for book: Book) -> BookFormat? {
+        for name in convertibleFormats {
+            if let format = book.format(name) { return format }
+        }
+        return nil
+    }
+
+    /// Books Convert to AZW3 would act on: something convertible, and no AZW3 yet.
+    func convertible(_ books: [Book]) -> [Book] {
+        books.filter { $0.format("AZW3") == nil && Self.conversionSource(for: $0) != nil }
+    }
+
+    /// calibre's Convert, for AZW3 only: the result is stored in the book's own folder and
+    /// listed in metadata.db as a format of the book, so it shows up in calibre too and the
+    /// sync sends it as-is rather than converting on the fly. The book's uuid goes in as its
+    /// ASIN, same as the sync's conversion, so the cover fix works for it.
+    func convertToAZW3(_ chosen: [Book]) async {
+        guard let store, syncProgress == nil else { return }
+        let candidates = convertible(chosen)
+        guard !candidates.isEmpty else {
+            lastSyncSummary = "Nothing to convert — already AZW3, or no EPUB, FB2 or CBZ"
+            return
+        }
+
+        let root = libraryRoot
+        let flag = CancellationFlag()
+        syncCancellation = flag
+        isCancellingSync = false
+        defer {
+            syncProgress = nil
+            syncCancellation = nil
+            isCancellingSync = false
+        }
+
+        var converted = 0
+        var failures: [String] = []
+        for (index, book) in candidates.enumerated() {
+            guard !flag.isCancelled, let source = Self.conversionSource(for: book) else { break }
+            syncProgress = SyncProgress(current: "Converting \(book.title)", index: index, total: candidates.count)
+
+            let input = book.url(of: source, in: root)
+            let asin = book.uuid
+            do {
+                // The writers are pure and CPU-bound: off the main actor, one book at a time.
+                let output = try await Task.detached(priority: .userInitiated) {
+                    let directory = FileManager.default.temporaryDirectory
+                        .appending(path: "octavo-convert-\(UUID().uuidString)")
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    return try Converter.convert(
+                        input, to: directory.appending(path: "book.azw3"), target: .azw3, asin: asin
+                    )
+                }.value
+                defer { try? FileManager.default.removeItem(at: output.deletingLastPathComponent()) }
+                _ = try store.addFormat(fileAt: output, to: book)
+                converted += 1
+            } catch {
+                failures.append("\(book.title): \(error.localizedDescription)")
+            }
+        }
+
+        loadLibrary()
+        var summary = flag.isCancelled ? "Conversion cancelled — " : ""
+        summary += "Converted to AZW3: \(converted)"
+        if !failures.isEmpty { summary += ", failed: \(failures.count) (\(failures[0]))" }
+        lastSyncSummary = summary
+        await refreshPlan()
     }
 
     func revealInFinder(_ books: [Book]) {

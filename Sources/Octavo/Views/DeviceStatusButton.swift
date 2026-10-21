@@ -35,8 +35,8 @@ struct DeviceStatusButton: View {
             Presentation(
                 symbol: "bolt.badge.clock",
                 tint: .secondary,
-                title: "Kindle connected, not in MTP mode",
-                detail: "Unlock the Kindle screen or choose file transfer on the device.",
+                title: "Kindle connected, not ready",
+                detail: "Unlock the Kindle screen. Newer Kindles need file transfer (MTP) chosen on the device; older ones appear as a drive called Kindle.",
                 actionTitle: "Try again"
             )
         case .connected(let snapshot):
@@ -44,7 +44,11 @@ struct DeviceStatusButton: View {
                 symbol: "book.closed.fill",
                 tint: nil,
                 title: snapshot.name,
-                detail: "\(snapshot.booksOnDevice) files, \(format(snapshot.freeSpace)) free",
+                detail: [
+                    "\(snapshot.booksOnDevice) files, \(format(snapshot.freeSpace)) free",
+                    [snapshot.connection.displayName, snapshot.firmware.map { "firmware \($0)" }]
+                        .compactMap(\.self).joined(separator: " · "),
+                ].joined(separator: "\n"),
                 actionTitle: nil
             )
         case .failed(let message):
@@ -92,6 +96,14 @@ struct DeviceStatusButton: View {
                     showingDetail = false
                     Task { await model.refreshOrConnect() }
                 }
+            }
+            if model.isUSBDrive {
+                // A drive-mode Kindle only adds new books once it leaves USB mode.
+                Button("Eject Kindle", systemImage: "eject") {
+                    showingDetail = false
+                    Task { await model.eject() }
+                }
+                .disabled(model.syncProgress != nil)
             }
         }
         .padding()

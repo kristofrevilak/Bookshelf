@@ -15,6 +15,10 @@ public struct DeviceManifest: Codable, Sendable {
         public var sourceModified: Date?
         public var format: String
         public var sentAt: Date
+        /// The cover thumbnail written for this book under `system/thumbnails/`, so it can be
+        /// put back when the firmware deletes it. Optional, so manifests written before it
+        /// existed still decode.
+        public var thumbnail: String?
 
         public init(
             filename: String,
@@ -22,7 +26,8 @@ public struct DeviceManifest: Codable, Sendable {
             sourceSize: Int64? = nil,
             sourceModified: Date? = nil,
             format: String,
-            sentAt: Date
+            sentAt: Date,
+            thumbnail: String? = nil
         ) {
             self.filename = filename
             self.deviceSize = deviceSize
@@ -30,6 +35,7 @@ public struct DeviceManifest: Codable, Sendable {
             self.sourceModified = sourceModified
             self.format = format
             self.sentAt = sentAt
+            self.thumbnail = thumbnail
         }
     }
 

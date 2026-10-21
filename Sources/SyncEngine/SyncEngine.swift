@@ -36,7 +36,7 @@ public struct SyncPlan: Sendable {
     /// Books whose only formats the Kindle cannot open (EPUB, CBZ, FB2…).
     public var unsupported: [Book] = []
     /// Files in documents/ that no library book claims.
-    public var orphans: [MTPObject] = []
+    public var orphans: [DeviceFile] = []
 
     public var totalBytes: Int64 { send.reduce(0) { $0 + $1.format.size } }
     public var isEmpty: Bool { send.isEmpty }
@@ -46,6 +46,7 @@ public enum SyncError: Error, LocalizedError {
     case noStorage
     case noDocumentsFolder
     case fileMissing(URL)
+    case missingOnDevice(String)
     case unsafeTarget(String)
 
     public var errorDescription: String? {
@@ -53,6 +54,7 @@ public enum SyncError: Error, LocalizedError {
         case .noStorage: return "The device has no available storage"
         case .noDocumentsFolder: return "The device has no documents/ folder"
         case .fileMissing(let url): return "Book file not found: \(url.path(percentEncoded: false))"
+        case .missingOnDevice(let name): return "Not on the device: \(name)"
         case .unsafeTarget(let name): return "Write refused: \(name)"
         }
     }
@@ -60,44 +62,42 @@ public enum SyncError: Error, LocalizedError {
 
 public final class SyncEngine {
     public let library: CalibreLibraryStore
-    public let session: MTPSession
-    public let storage: MTPStorage
-    /// Every write goes under this handle. The storage root — where firmware update
-    /// files live — is never a write target.
-    public let documentsHandle: UInt32
+    /// The Kindle, over MTP or as a mounted USB drive. Every book write goes into its
+    /// `documents/`; see `KindleStorage` for the boundary.
+    public let device: KindleStorage
     public var conversionCache = ConversionCache.default
+    public var thumbnailCache = ThumbnailCache.default
     /// What EPUB, FB2 and CBZ are converted to. Set by the caller from the user's preference —
     /// `plan` and `pruneConversionCache` read it, but `execute` reads `SendItem.conversion`
     /// instead, so a plan stays coherent even if the setting changes while it runs.
     public var conversionTarget = ConversionTarget.default
+    /// Settings ▸ Sync ▸ Fix cover thumbnails. Only has an effect on USB-drive Kindles.
+    public var writesThumbnails = true
 
     /// Where `octavo-sync --apply` and the app's "back up before first sync" setting both pull
     /// documents/ to, by default — one constant so the two agree without either hardcoding it.
     public static let defaultBackupDirectory = URL.homeDirectory
         .appending(path: "Library/Application Support/Octavo/device-backup")
 
-    public init(library: CalibreLibraryStore, session: MTPSession) throws {
+    public init(library: CalibreLibraryStore, device: KindleStorage) {
         self.library = library
-        self.session = session
+        self.device = device
+    }
 
-        guard let storage = try session.storages().first else { throw SyncError.noStorage }
-        self.storage = storage
-        guard let documents = try session.object(at: "documents", storageID: storage.id) else {
-            throw SyncError.noDocumentsFolder
-        }
-        self.documentsHandle = documents.id
+    /// The MTP path, as Octavo always had it.
+    public convenience init(library: CalibreLibraryStore, session: MTPSession) throws {
+        self.init(library: library, device: try MTPKindleStorage(session: session))
     }
 
     // MARK: - Manifest
 
     /// Reads our manifest, falling back to calibre's on the first run.
     public func loadManifest() throws -> DeviceManifest {
-        if let object = try documentsChildren().first(where: { $0.filename == DeviceManifest.filename }),
-           let manifest = try? DeviceManifest.decode(session.data(of: object.id)) {
+        if try documentsChildren().contains(where: { $0.filename == DeviceManifest.filename && !$0.isFolder }),
+           let manifest = try? DeviceManifest.decode(device.readDocument(named: DeviceManifest.filename)) {
             return manifest
         }
-        if let calibre = try session.object(at: "metadata.calibre", storageID: storage.id),
-           let bytes = try? session.data(of: calibre.id) {
+        if let bytes = try? device.readRootFile("metadata.calibre") {
             return DeviceManifest.adoptingCalibreManifest(bytes)
         }
         return DeviceManifest()
@@ -106,21 +106,11 @@ public final class SyncEngine {
     public func saveManifest(_ manifest: DeviceManifest) throws {
         var updated = manifest
         updated.adoptedFromCalibre = false
-        let bytes = try updated.encoded()
-
-        if let existing = try documentsChildren().first(where: { $0.filename == DeviceManifest.filename }) {
-            try session.delete(handle: existing.id)
-        }
-        try session.sendFile(
-            bytes,
-            named: DeviceManifest.filename,
-            storageID: storage.id,
-            parent: documentsHandle
-        )
+        try device.writeDocument(try updated.encoded(), named: DeviceManifest.filename, modified: Date())
     }
 
-    public func documentsChildren() throws -> [MTPObject] {
-        try session.children(storageID: storage.id, parent: documentsHandle)
+    public func documentsChildren() throws -> [DeviceFile] {
+        try device.documentsChildren()
     }
 
     // MARK: - Planning
@@ -128,11 +118,11 @@ public final class SyncEngine {
     public func plan(books: [Book], manifest: DeviceManifest) throws -> SyncPlan {
         let onDevice = try documentsChildren().filter { !$0.isFolder }
         // calibre's manifest lowercases lpath, the filesystem does not.
-        var byName: [String: MTPObject] = [:]
-        for object in onDevice { byName[object.filename.lowercased()] = object }
+        var byName: [String: DeviceFile] = [:]
+        for file in onDevice { byName[file.filename.lowercased()] = file }
 
         var plan = SyncPlan()
-        var claimed = Set<UInt32>()
+        var claimed = Set<String>()
 
         for book in books {
             let readable = bestFormat(for: book)
@@ -145,7 +135,7 @@ public final class SyncEngine {
 
             let entry = manifest.entries[book.uuid]
             let existing = entry.flatMap { byName[$0.filename.lowercased()] }
-            if let existing { claimed.insert(existing.id) }
+            if let existing { claimed.insert(existing.filename.lowercased()) }
 
             // The manifest's name normally wins, so the books calibre put on the device stay
             // matched. The exception is a converted book whose target format changed: none of
@@ -170,7 +160,7 @@ public final class SyncEngine {
                 continue
             }
 
-            if retarget || Self.isStale(entry: entry, deviceObject: existing, book: book, format: format) {
+            if retarget || Self.isStale(entry: entry, deviceFile: existing, book: book, format: format) {
                 plan.send.append(SendItem(
                     book: book, format: format, filename: filename,
                     reason: .changed, conversion: target,
@@ -182,7 +172,7 @@ public final class SyncEngine {
         }
 
         plan.orphans = onDevice.filter {
-            !claimed.contains($0.id) && $0.filename != DeviceManifest.filename
+            !claimed.contains($0.filename.lowercased()) && $0.filename != DeviceManifest.filename
         }
         return plan
     }
@@ -191,8 +181,8 @@ public final class SyncEngine {
     /// when the library file changed size, or when the book's metadata was edited after
     /// the copy was sent. Byte size alone is not enough: calibre rewrites EXTH metadata
     /// during transfer, so its copies differ from the library file by a few bytes.
-    static func isStale(entry: DeviceManifest.Entry, deviceObject: MTPObject, book: Book, format: BookFormat) -> Bool {
-        if entry.deviceSize > 0, entry.deviceSize != Int64(deviceObject.size) { return true }
+    static func isStale(entry: DeviceManifest.Entry, deviceFile: DeviceFile, book: Book, format: BookFormat) -> Bool {
+        if entry.deviceSize > 0, entry.deviceSize != Int64(deviceFile.size) { return true }
         if let sourceSize = entry.sourceSize, sourceSize != format.size { return true }
         if let sourceModified = entry.sourceModified, book.lastModified > sourceModified.addingTimeInterval(1) {
             return true
@@ -274,9 +264,7 @@ public final class SyncEngine {
 
         for (index, item) in plan.send.enumerated() {
             if shouldStop?() == true { break }
-            guard !item.filename.lowercased().hasSuffix(".bin") else {
-                throw SyncError.unsafeTarget("\(item.filename) — .bin looks like a firmware update")
-            }
+            try KindleStorageGuard.checkDocumentName(item.filename)
             onProgress?(Progress(item: item, index: index, total: plan.send.count))
 
             // EPUB, FB2 and CBZ become an AZW3 or a MOBI first; the result is cached on disk.
@@ -298,23 +286,15 @@ public final class SyncEngine {
             // Replacing a book means removing the old file first — including the copy under a
             // previous extension when the target format changed, which would otherwise become
             // an orphan. .sdr sidecars are named after the stem, not the extension, so reading
-            // progress and annotations survive the rename untouched.
-            let children = try documentsChildren()
-            for name in [item.filename, item.replaces].compactMap(\.self) {
-                if let existing = children.first(where: {
-                    $0.filename.caseInsensitiveCompare(name) == .orderedSame
-                }) {
-                    try session.delete(handle: existing.id)
-                }
+            // progress and annotations survive the rename untouched. writeDocument replaces a
+            // file of the same name by itself.
+            if let replaced = item.replaces, replaced.caseInsensitiveCompare(item.filename) != .orderedSame {
+                try device.deleteDocument(named: replaced)
             }
+            try device.writeDocument(Array(data), named: item.filename, modified: item.book.lastModified)
 
-            try session.sendFile(
-                Array(data),
-                named: item.filename,
-                storageID: storage.id,
-                parent: documentsHandle,
-                modified: item.book.lastModified
-            )
+            // Best effort: a missing cover must not fail the book it belongs to.
+            let thumbnail = try? writeThumbnail(for: item.book, bookBytes: data)
 
             updated.entries[item.book.uuid] = DeviceManifest.Entry(
                 filename: item.filename,
@@ -322,7 +302,8 @@ public final class SyncEngine {
                 sourceSize: item.format.size,
                 sourceModified: item.book.lastModified,
                 format: item.format.format,
-                sentAt: Date()
+                sentAt: Date(),
+                thumbnail: thumbnail
             )
         }
 
@@ -357,7 +338,7 @@ public final class SyncEngine {
             onFile?(file.filename, index, files.count)
             let destination = directory.appending(path: file.filename)
             guard !FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) else { continue }
-            let bytes = try session.data(of: file.id)
+            let bytes = try device.readDocument(named: file.filename)
             try Data(bytes).write(to: destination)
         }
     }

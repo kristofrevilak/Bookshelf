@@ -70,6 +70,10 @@ struct AppCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(model.selectedBooks.isEmpty)
 
+            Button("Convert to AZW3") { Task { await model.convertToAZW3(model.selectedBooks) } }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+                .disabled(model.convertible(model.selectedBooks).isEmpty || model.syncProgress != nil)
+
             Divider()
 
             Button("Refresh Library") { model.loadLibrary() }
@@ -108,6 +112,10 @@ struct AppCommands: Commands {
             Button("Back Up Device…") { Task { await model.backUpDevice() } }
                 .keyboardShortcut("b", modifiers: [.command, .shift])
                 .disabled(!model.isConnected)
+
+            Button("Eject Kindle") { Task { await model.eject() } }
+                .keyboardShortcut("e")
+                .disabled(!model.isUSBDrive || model.syncProgress != nil)
 
             Divider()
 

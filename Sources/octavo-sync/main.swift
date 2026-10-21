@@ -55,14 +55,26 @@ do {
     let books = try library.books()
     print("Library: \(books.count) books — \(library.root.path(percentEncoded: false))")
 
-    let transport = try MTPTransport.openKindle()
-    let session = MTPSession(transport: transport)
-    try session.open()
-    defer { try? session.close() }
-
-    let engine = try SyncEngine(library: library, session: session)
+    // A Kindle mounted as a drive (10th generation and older) first; MTP otherwise.
+    var session: MTPSession?
+    defer { try? session?.close() }
+    let engine: SyncEngine
+    if let volume = KindleVolume.mounted().first {
+        engine = SyncEngine(library: library, device: try VolumeKindleStorage(root: volume))
+    } else {
+        let transport = try MTPTransport.openKindle()
+        let opened = MTPSession(transport: transport)
+        try opened.open()
+        session = opened
+        engine = SyncEngine(
+            library: library,
+            device: try MTPKindleStorage(session: opened, name: transport.device.product ?? "Kindle")
+        )
+    }
     engine.conversionTarget = conversionTarget
-    print("Device: \(transport.device.product ?? "Kindle") — \(humanSize(Int64(engine.storage.freeSpace))) free")
+    let space = try engine.device.space()
+    let firmware = engine.device.firmware.map { ", firmware \($0)" } ?? ""
+    print("Device: \(engine.device.displayName) (\(engine.device.connection.displayName)\(firmware)) — \(humanSize(Int64(space.free))) free")
     print("Conversion target: \(conversionTarget.displayName)")
 
     let manifest = try engine.loadManifest()
@@ -104,6 +116,15 @@ do {
         exit(0)
     }
 
+    /// The cover fix runs on every applied sync, including one with nothing to send.
+    func fixCovers() throws {
+        guard engine.device.supportsThumbnails else { return }
+        let report = try engine.restoreThumbnails(for: books, recordNew: true)
+        if report.total > 0 {
+            print("Cover thumbnails: \(report.created) written, \(report.restored) put back")
+        }
+    }
+
     guard !plan.isEmpty else {
         if manifest.adoptedFromCalibre {
             // Persist the adoption so the next run doesn't depend on calibre's file.
@@ -112,6 +133,7 @@ do {
         } else {
             print("\nEverything is up to date, nothing to send.")
         }
+        try fixCovers()
         exit(0)
     }
 
@@ -128,6 +150,10 @@ do {
         print("  [\(progress.index + 1)/\(progress.total)] \(progress.item.filename) — \(humanSize(progress.item.format.size))")
     }
     print("Done. The manifest holds \(updated.entries.count) books.")
+    try fixCovers()
+    if engine.device.connection == .usbDrive {
+        print("Eject the Kindle so it picks the new books up.")
+    }
 } catch {
     print("Error: \(error.localizedDescription)")
     exit(1)

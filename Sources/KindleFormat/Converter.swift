@@ -26,13 +26,18 @@ public enum Converter {
     }
 
     /// Converts and writes the result next to the requested destination.
+    ///
+    /// `asin` goes into EXTH 113/504; pass the calibre book uuid. Without one the Kindle has no
+    /// stable id to name the cover thumbnail after, so the thumbnail fix cannot apply.
     @discardableResult
     public static func convert(
         _ source: URL,
         to destination: URL,
-        target: ConversionTarget = .default
+        target: ConversionTarget = .default,
+        asin: String? = nil
     ) throws -> URL {
-        let document = try read(source)
+        var document = try read(source)
+        if let asin, !asin.isEmpty { document.metadata.asin = asin }
         try write(document, to: destination, target: target)
         return destination
     }

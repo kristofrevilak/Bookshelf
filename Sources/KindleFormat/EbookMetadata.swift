@@ -13,6 +13,11 @@ public struct EbookMetadata: Sendable {
     public var series: String?
     public var seriesIndex: Double?
     public var cover: Data?
+    /// Written to EXTH 113 and 504. The Kindle files a book under this id and names its cover
+    /// thumbnail after it (`system/thumbnails/thumbnail_<asin>_EBOK_portrait.jpg`), which is
+    /// what lets the thumbnail fix put back a cover the firmware deleted. calibre uses the book
+    /// uuid here, and so does the sync path, so the two stay interchangeable.
+    public var asin: String?
 
     public init(title: String) {
         self.title = title

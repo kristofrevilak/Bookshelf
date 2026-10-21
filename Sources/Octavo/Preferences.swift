@@ -25,6 +25,7 @@ final class Preferences {
         static let rememberFilter = "library.rememberFilter"
         static let lastFilter = "library.lastFilter"
         static let confirmRemoval = "device.confirmRemoval"
+        static let fixCoverThumbnails = "sync.fixCoverThumbnails"
         static let googleBooksAPIKey = "GoogleBooksAPIKey"
         static let useOpenLibrary = "metadata.useOpenLibrary"
         static let useFantLab = "metadata.useFantLab"
@@ -45,6 +46,9 @@ final class Preferences {
     var rememberLastFilter: Bool { didSet { defaults.set(rememberLastFilter, forKey: Key.rememberFilter) } }
     var lastFilter: String { didSet { defaults.set(lastFilter, forKey: Key.lastFilter) } }
     var confirmDeviceRemoval: Bool { didSet { defaults.set(confirmDeviceRemoval, forKey: Key.confirmRemoval) } }
+    /// calibre's Kindle cover fix: write cover thumbnails and put back the ones the firmware
+    /// deletes. USB-drive Kindles only.
+    var fixCoverThumbnails: Bool { didSet { defaults.set(fixCoverThumbnails, forKey: Key.fixCoverThumbnails) } }
 
     /// Legacy key, kept exactly as `MetadataFetcher` already reads it — this is the only
     /// writer, giving the field in Settings ▸ Metadata somewhere to save to.
@@ -66,6 +70,7 @@ final class Preferences {
             .flatMap(ConversionTarget.init(rawValue:)) ?? .default
         rememberLastFilter = defaults.object(forKey: Key.rememberFilter) as? Bool ?? true
         confirmDeviceRemoval = defaults.object(forKey: Key.confirmRemoval) as? Bool ?? true
+        fixCoverThumbnails = defaults.object(forKey: Key.fixCoverThumbnails) as? Bool ?? true
         lastFilter = defaults.string(forKey: Key.lastFilter) ?? "all"
         googleBooksAPIKey = defaults.string(forKey: Key.googleBooksAPIKey) ?? ""
         useOpenLibrary = defaults.object(forKey: Key.useOpenLibrary) as? Bool ?? true

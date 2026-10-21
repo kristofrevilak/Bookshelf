@@ -84,7 +84,8 @@ MTPKit        PTP/MTP over IOUSBHost: transport, container codec, session, opera
 CalibreLibrary  read/write metadata.db in calibre's schema, book import, metadata.opf
 KindleFormat  zip reader, metadata parsers (EPUB/MOBI/FB2/PDF/CBZ), AZW3/KF8 + MOBI 6 writers, converters
 MetadataFetch Open Library + FantLab + Google Books
-SyncEngine    library↔device diff, on-device manifest, conversion cache, transfer
+SyncEngine    library↔device diff, on-device manifest, conversion cache, transfer, cover thumbnails;
+              KindleStorage: MTPKindleStorage (MTP) and VolumeKindleStorage (mounted USB drive)
 Octavo        SwiftUI app (AppModel + DeviceController actor)
 ```
 
@@ -104,6 +105,38 @@ already-synced book to read its details never takes the full sync away. A select
 through `sync(only:)`, which still hands `DeviceController.sync` the *whole* library: cache pruning
 keeps exactly what `books` would produce, so passing just the selection would delete every other
 book's cached conversion.
+
+### Two ways a Kindle attaches
+
+`SyncEngine` never talks to MTP directly any more; it holds a `KindleStorage`. `MTPKindleStorage`
+wraps the session exactly as the engine used it before. `VolumeKindleStorage` is a Kindle mounted
+as a disk — the Kindle 10th generation (firmware 5.18.1) and everything before the MTP models —
+and is plain file I/O on `/Volumes/Kindle`. `DeviceController.connect()` prefers a mounted Kindle
+(`KindleVolume.mounted()`) and falls back to MTP; `octavo-sync` does the same.
+
+Drive-mode details that matter: writes go to a hidden `.…octavo-part` temp file, fsync, then a
+rename, so a pulled cable never leaves a truncated book under its real name; AppleDouble `._name`
+files and `.DS_Store` are hidden from listings (they would otherwise show as orphans) and a book's
+`._` companion is deleted with it; a volume only counts as a Kindle with `documents/` *and*
+`system/` plus the name "Kindle" or `system/version.txt`. The app learns about mounts from
+`VolumeWatcher` (NSWorkspace mount notifications, initial scan included, like `USBWatcher`), and
+`AppModel.mountedKindle` stops the MTP deadline from reporting "not ready" for a Kindle that never
+offers MTP. A drive-mode Kindle only indexes new books once ejected, hence `AppModel.eject()`.
+The USB-drive path is covered end to end by `USBDriveTests`, against a temp folder laid out like
+the Kindle's volume — no device needed.
+
+### Cover thumbnails
+
+A sideloaded book with an ASIN and cdetype EBOK is filed as a store book: the firmware drops the
+thumbnail it made from the embedded cover and fetches one from Amazon by ASIN, which fails, so the
+cover goes grey. calibre's fix, reproduced in `Thumbnails.swift`: write
+`system/thumbnails/thumbnail_<ASIN>_<cdetype>_portrait.jpg` (330 px high), keep a copy in
+`~/Library/Caches/Octavo/thumbnails`, record the name in the manifest entry, and put it back on
+every connect. The writers now stamp the book uuid as ASIN (EXTH 113 and 504), as calibre does;
+`ConversionCache.revision` was bumped to 2 for it, so old cached conversions are not reused.
+On connect only already-recorded thumbnails are restored (no write to `documents/`); during a sync
+books without one get it too, named from the ASIN read out of the first 256 KB of the device file.
+USB-drive Kindles only — `MTPKindleStorage.supportsThumbnails` is false until checked on a device.
 
 ### Concurrency
 
@@ -221,8 +254,10 @@ These cost debugging time; do not rediscover them.
 
 Enforced in code, not by convention — keep them that way:
 
-- Writes go **only** under the `documents/` handle. `*.bin` in the storage root is what the Kindle
-  treats as a firmware update.
+- Writes go **only** under `documents/`, and every name passes `KindleStorageGuard.checkDocumentName`
+  (no path separators, no `..`, never `*.bin` — a `.bin` in the storage root is what the Kindle
+  treats as a firmware update). The single exception is a cover thumbnail into
+  `system/thumbnails/`, whose name must match `thumbnail_<id>_<TYPE>_portrait.jpg` exactly.
 - `.sdr` folders (reading progress, annotations, highlights) are never deleted; orphan detection
   skips folders entirely, and book removal is only ever an explicit user action. The app's
   "Remove from device" goes through `DeviceController.remove(bookUUIDs:)`, which resolves filenames
@@ -259,4 +294,5 @@ for "does this book actually open".
 
 Embedded EPUB fonts (dropped, the Kindle substitutes), TBS trailing byte sequences (calibre
 writes them, we do not; navigation works without them),
-`filepos` internal links in MOBI 6 output (AZW3 gets `kindle:pos:` ones), `.apnx` page numbers.
+`filepos` internal links in MOBI 6 output (AZW3 gets `kindle:pos:` ones), `.apnx` page numbers,
+cover thumbnails over MTP.

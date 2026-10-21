@@ -36,8 +36,18 @@ Metadata editor with live catalogue search:
 
 ## What it does
 
-- **Syncs to the Kindle over MTP** — no cloud, no email-to-Kindle, no Amazon account. Plug the
-  cable in and Octavo notices; a diff against the device says what is missing.
+- **Syncs to the Kindle over MTP or as a USB drive** — no cloud, no email-to-Kindle, no Amazon account.
+  Newer Kindles (Paperwhite 12, Kindle 2024, Scribe) speak MTP; the Kindle 10th generation and older
+  mount as a drive called *Kindle*, and both work. Plug the cable in and the app notices; a diff
+  against the device says what is missing. A drive-mode Kindle gets an **Eject** (`⌘E`), which is
+  what makes it pick the new books up.
+- **Keeps sideloaded covers** — calibre's Kindle cover fix: each book's cover is written to
+  `system/thumbnails/` and put back on every connect when the firmware deletes it (it does, after
+  looking the cover up on Amazon and finding nothing). USB-drive Kindles; Settings ▸ Sync ▸ Fix
+  cover thumbnails.
+- **Converts to AZW3 on demand** — Library ▸ Convert to AZW3 (`⇧⌘K`, or the context menu) stores the
+  AZW3 in the book's folder and in `metadata.db`, the way calibre's Convert does, so it is a real
+  format of the book from then on.
 - **Sends the whole library or just a selection** — select books and the toolbar button becomes
   *Send N Selected*; deselect and it syncs everything again. The same is in the context menu, the
   multi-selection pane and Device ▸ Send Selected to Device (`⌥⌘S`), next to Sync All (`⇧⌘S`).

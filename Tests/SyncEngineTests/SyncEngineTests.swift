@@ -2,7 +2,6 @@ import CalibreLibrary
 import Foundation
 import KindleFormat
 import Testing
-@testable import MTPKit
 @testable import SyncEngine
 
 private let sent = Date(timeIntervalSince1970: 1_700_000_000)
@@ -15,8 +14,8 @@ private func makeBook(lastModified: Date = sent, formats: [BookFormat]) -> Book 
     )
 }
 
-private func makeObject(size: UInt64, name: String) -> MTPObject {
-    MTPObject(id: 42, storageID: 1, parentID: 2, format: 0x3000, size: size, filename: name, modified: nil)
+private func makeObject(size: UInt64, name: String) -> DeviceFile {
+    DeviceFile(filename: name, size: size, isFolder: false)
 }
 
 @Test func adoptsCalibreManifest() throws {
@@ -45,7 +44,7 @@ private func makeObject(size: UInt64, name: String) -> MTPObject {
         sourceModified: book.lastModified, format: "AZW3", sentAt: .distantPast
     )
     #expect(!SyncEngine.isStale(
-        entry: entry, deviceObject: makeObject(size: 591_233, name: "riemieslo.azw3"),
+        entry: entry, deviceFile: makeObject(size: 591_233, name: "riemieslo.azw3"),
         book: book, format: book.formats[0]
     ))
 }
@@ -57,7 +56,7 @@ private func makeObject(size: UInt64, name: String) -> MTPObject {
         sourceModified: book.lastModified, format: "AZW3", sentAt: sent
     )
     #expect(SyncEngine.isStale(
-        entry: entry, deviceObject: makeObject(size: 250, name: "r.azw3"),
+        entry: entry, deviceFile: makeObject(size: 250, name: "r.azw3"),
         book: book, format: book.formats[0]
     ))
 }
@@ -70,12 +69,12 @@ private func makeObject(size: UInt64, name: String) -> MTPObject {
     )
     let edited = makeBook(lastModified: sent.addingTimeInterval(3600), formats: [format])
     #expect(SyncEngine.isStale(
-        entry: entry, deviceObject: makeObject(size: 100, name: "r.azw3"), book: edited, format: format
+        entry: entry, deviceFile: makeObject(size: 100, name: "r.azw3"), book: edited, format: format
     ))
 
     let grown = BookFormat(format: "AZW3", name: "R", size: 900)
     #expect(SyncEngine.isStale(
-        entry: entry, deviceObject: makeObject(size: 100, name: "r.azw3"),
+        entry: entry, deviceFile: makeObject(size: 100, name: "r.azw3"),
         book: makeBook(formats: [grown]), format: grown
     ))
 }

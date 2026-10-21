@@ -141,6 +141,64 @@ public enum MOBIReader {
         return metadata
     }
 
+    /// What the Kindle files a book under: ASIN (EXTH 113, else 504) and content type (EXTH 501,
+    /// "EBOK" or "PDOC"). Both are needed to name a cover thumbnail; either missing means the
+    /// firmware makes its own and there is nothing to fix.
+    ///
+    /// Only record 0 is read, so a prefix of the file is enough — record 0 starts within the
+    /// first kilobytes and calibre's is under 64 KB even with a long description.
+    public struct KindleIdentity: Sendable, Equatable {
+        public let asin: String
+        public let cdetype: String
+
+        public init(asin: String, cdetype: String) {
+            self.asin = asin
+            self.cdetype = cdetype
+        }
+    }
+
+    public static func kindleIdentity(of data: Data) -> KindleIdentity? {
+        guard let records = try? recordOffsets(data), let record0Start = records.first,
+              record0Start + 20 < data.count,
+              data.subdata(in: record0Start + 16..<record0Start + 20) == Data("MOBI".utf8)
+        else { return nil }
+
+        let mobiHeaderStart = record0Start + 16
+        guard mobiHeaderStart + MOBIHeader.exthFlags + 4 <= data.count else { return nil }
+        let mobiHeaderLength = Int(data.loadBE32(mobiHeaderStart + MOBIHeader.headerLength))
+        guard data.loadBE32(mobiHeaderStart + MOBIHeader.exthFlags) & 0x40 != 0 else { return nil }
+
+        let exthStart = mobiHeaderStart + mobiHeaderLength
+        guard exthStart + 12 <= data.count,
+              data.subdata(in: exthStart..<exthStart + 4) == Data("EXTH".utf8)
+        else { return nil }
+
+        var asin113: String?
+        var asin504: String?
+        var cdetype: String?
+        var cursor = exthStart + 12
+        for _ in 0..<Int(data.loadBE32(exthStart + 8)) {
+            guard cursor + 8 <= data.count else { break }
+            let type = data.loadBE32(cursor)
+            let length = Int(data.loadBE32(cursor + 4))
+            guard length >= 8, cursor + length <= data.count else { break }
+            let value = String(data: data.subdata(in: cursor + 8..<cursor + length), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
+            cursor += length
+
+            guard let value, !value.isEmpty else { continue }
+            switch type {
+            case 113: asin113 = value
+            case 504: asin504 = value
+            case 501: cdetype = value
+            default: break
+            }
+        }
+
+        guard let asin = asin113 ?? asin504, let cdetype else { return nil }
+        return KindleIdentity(asin: asin, cdetype: cdetype)
+    }
+
     /// PalmDB: 78-byte header, then one 8-byte entry per record holding its file offset.
     static func recordOffsets(_ data: Data) throws -> [Int] {
         guard data.count > 78 else { throw MOBIError.notAPalmDatabase }

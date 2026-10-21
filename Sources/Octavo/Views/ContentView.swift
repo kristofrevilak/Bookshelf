@@ -243,6 +243,12 @@ struct BookTable: View {
                 Button("Metadata…", systemImage: "pencil") { model.editingBook = chosen[0] }
             }
             Button("Show in Finder", systemImage: "folder") { model.revealInFinder(chosen) }
+            if !model.convertible(chosen).isEmpty {
+                Button("Convert to AZW3", systemImage: "wand.and.sparkles") {
+                    Task { await model.convertToAZW3(chosen) }
+                }
+                .disabled(model.syncProgress != nil)
+            }
             Divider()
             Button(sendTitle(for: ids), systemImage: "arrow.up.circle") { model.send(chosen) }
                 .disabled(!model.isConnected || model.syncProgress != nil || model.pendingSends(in: ids).isEmpty)

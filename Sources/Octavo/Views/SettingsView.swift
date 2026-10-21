@@ -87,6 +87,12 @@ private struct SyncSettingsTab: View {
             } footer: {
                 Text("Reading progress and highlights (.sdr) are never touched, backed up or not.")
             }
+
+            Section {
+                Toggle("Fix cover thumbnails", isOn: $preferences.fixCoverThumbnails)
+            } footer: {
+                Text("Writes each book's cover into the Kindle's thumbnail folder and puts it back whenever the Kindle deletes it, so sideloaded books keep their covers. For Kindles that connect as a USB drive.")
+            }
         }
         .formStyle(.grouped)
     }

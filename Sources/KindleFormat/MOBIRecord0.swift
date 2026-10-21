@@ -153,7 +153,11 @@ enum MOBIRecord0 {
             add(106, formatter.string(from: published))
         }
         add(108, "Octavo")
+        // ASIN, twice, the way calibre writes it: 113 is what the firmware reads, 504 is the
+        // copy KF8 readers fall back to.
+        add(113, metadata.asin)
         add(501, "EBOK")
+        add(504, metadata.asin)
         add(503, metadata.title)
         add(524, metadata.language)
 

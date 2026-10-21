@@ -19,9 +19,15 @@ public struct ConversionCache: Sendable {
     /// `source` is the library format being converted *from*, `target` the Kindle format being
     /// converted *to*. Only the extension carries the target, so switching it leaves the entries
     /// for the other one valid rather than orphaning the whole cache.
+    ///
+    /// `revision` is bumped whenever the writers' output changes in a way the device should
+    /// see — the key otherwise folds in the source only, so old output would be reused.
+    /// Revision 2: EXTH carries the book uuid as ASIN (113/504), which the thumbnail fix needs.
+    public static let revision = 2
+
     public func cachedURL(for book: Book, source: BookFormat, target: ConversionTarget) -> URL {
         let stamp = Int(book.lastModified.timeIntervalSince1970)
-        let key = "\(book.uuid)-\(source.format.lowercased())-\(source.size)-\(stamp)"
+        let key = "\(book.uuid)-\(source.format.lowercased())-\(source.size)-\(stamp)-r\(Self.revision)"
         return directory.appending(path: "\(key).\(target.fileExtension)")
     }
 
@@ -37,7 +43,9 @@ public struct ConversionCache: Sendable {
             return destination
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return try Converter.convert(book.url(of: source, in: library), to: destination, target: target)
+        return try Converter.convert(
+            book.url(of: source, in: library), to: destination, target: target, asin: book.uuid
+        )
     }
 
     /// Drops cached files that no current book claims.
